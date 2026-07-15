@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 const LOGIN_SESSION_KEY = "raweeClinicAuthenticated";
+const APP_VERSION = "1.0.0";
 type UserRole = "owner" | "staff";
 
 const LOGIN_USER_HASH = "5e00556ac64a0763e7921cbf4841e8fc032c51a839faa53e1acecfa00f29f0d5";
@@ -191,7 +192,7 @@ export default function Home() {
             </button>
           ))}
         </nav>
-        <div className="clinic-card"><span className="pulse"/><div><b>Rawee Clinic</b><small>ระบบพร้อมใช้งาน</small></div></div>
+        <div className="clinic-card"><span className="pulse"/><div><b>Rawee Clinic</b><small>ระบบพร้อมใช้งาน · v{APP_VERSION}</small></div></div>
         <div className="user"><div className="avatar">{role === "owner" ? "ร" : "S"}</div><div><b>{role === "owner" ? "คุณรวี" : "Staff"}</b><small>{role === "owner" ? "เจ้าของคลินิก" : "พนักงาน"}</small></div><button className="logout-btn" onClick={() => { sessionStorage.removeItem(LOGIN_SESSION_KEY); setRole(null); }}>ออก</button></div>
       </aside>
 
@@ -252,7 +253,7 @@ function LoginPage({ onLogin }: { onLogin: (role: UserRole) => void }) {
         {error && <p className="login-error">{error}</p>}
         <button className="primary login-submit" disabled={checking}>{checking ? "กำลังตรวจสอบ..." : "เข้าสู่ระบบ"}</button>
       </form>
-      <small className="login-help">หากลืมรหัสผ่าน กรุณาติดต่อเจ้าของคลินิก</small>
+      <small className="login-help">หากลืมรหัสผ่าน กรุณาติดต่อเจ้าของคลินิก · v{APP_VERSION}</small>
     </section>
   </main>;
 }
