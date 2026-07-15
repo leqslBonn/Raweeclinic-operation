@@ -18,6 +18,7 @@ function doPost(e) {
       case 'getSystemData': return getSystemData_();
       case 'addCustomer': return addCustomer_(body.data || {});
       case 'updateCustomer': return updateRecord_('Customers', 'customer_id', body.data || {});
+      case 'recordCustomerActivity': return recordCustomerActivity_(body.data || {});
       case 'addAppointment': return appendRecord_('Appointments', body.data || {}, 'APT');
       case 'addFollowUp': return appendRecord_('FollowUps', body.data || {}, 'FUP');
       case 'addEmployee': return upsertRecord_('Employees', 'employee_id', body.data || {}, 'EMP');
@@ -71,6 +72,38 @@ function getSystemData_() {
     attendance: records_('Attendance'),
     timestamp: new Date().toISOString()
   });
+}
+
+function recordCustomerActivity_(data) {
+  if (!data.customer_id || !data.status) return json_({ ok: false, error: 'Customer and status are required' });
+  const customerSheet = sheet_('Customers');
+  const values = customerSheet.getDataRange().getValues();
+  const headers = values[0].map(String);
+  const idIndex = headers.indexOf('customer_id');
+  const rowIndex = idIndex < 0 ? -1 : values.slice(1).findIndex(row => String(row[idIndex]) === String(data.customer_id));
+  if (rowIndex < 0) return json_({ ok: false, error: 'Customer not found' });
+  const activityAt = new Date();
+  const updates = {
+    status: data.status,
+    last_activity_at: activityAt,
+    last_activity_note: data.note || ('เปลี่ยนสถานะเป็น ' + data.status),
+    updated_at: activityAt
+  };
+  headers.forEach((header, columnIndex) => {
+    if (Object.prototype.hasOwnProperty.call(updates, header)) customerSheet.getRange(rowIndex + 2, columnIndex + 1).setValue(updates[header]);
+  });
+  const followup = {
+    followup_id: makeId_('FUP'),
+    customer_id: data.customer_id,
+    status: data.status,
+    channel: data.channel || 'System',
+    note: updates.last_activity_note,
+    assigned_to: data.performed_by || '',
+    completed_at: activityAt,
+    created_at: activityAt
+  };
+  appendByHeaders_(sheet_('FollowUps'), followup);
+  return json_({ ok: true, customer_id: data.customer_id, status: data.status, activity_at: activityAt.toISOString() });
 }
 
 function records_(sheetName) {

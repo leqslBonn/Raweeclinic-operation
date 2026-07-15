@@ -142,6 +142,17 @@ export default function Home() {
     }catch{setDataStatus("error");}
   }
 
+  async function updateCustomerStatus(customerId:string,status:string) {
+    const url=localStorage.getItem(CONNECTION_URL_KEY)||"";
+    const apiKey=localStorage.getItem(CONNECTION_API_KEY)||"";
+    if(!url||!apiKey) throw new Error("กรุณาเชื่อม Google Sheet ก่อน");
+    const response=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"recordCustomerActivity",apiKey,data:{customer_id:customerId,status,note:`ปรับสถานะเป็น ${status}`,channel:"Web App",performed_by:role==="owner"?"Rawee":"Staff"}})});
+    const result=await response.json();
+    if(!result.ok) throw new Error(result.error||"บันทึกสถานะไม่สำเร็จ");
+    setCustomers(current=>current.map(customer=>customer.id===customerId?{...customer,status}:customer));
+    await loadSheetData();
+  }
+
   useEffect(()=>{if(role) void loadSheetData();},[role,connectionVersion]);
 
   if (role === undefined) return <div className="login-loading">กำลังเปิดระบบ...</div>;
@@ -175,7 +186,7 @@ export default function Home() {
           <div className="header-actions"><span className={`data-source ${dataStatus}`}>{dataStatus==="sheet"?"● Google Sheet":dataStatus==="loading"?"กำลังโหลด...":dataStatus==="error"?"○ รออัปเดต Apps Script":"○ ข้อมูลตัวอย่าง"}</span><button className="icon-btn" aria-label="โหลดข้อมูลใหม่" title="โหลดข้อมูลจาก Google Sheet ใหม่" onClick={()=>void loadSheetData()}>↻</button><button className="primary" onClick={() => setShowAdd(true)}>＋ เพิ่มลูกค้าใหม่</button></div>
         </header>
 
-        {active === "ภาพรวม" ? <Dashboard done={done} setDone={setDone} onOpenModule={setActive} customers={customers} employees={employees} /> : active === "ตั้งค่า" && role === "owner" ? <SettingsPage key={connectionVersion} onSaved={() => setConnectionVersion(v => v + 1)} /> : <ModuleContent active={active} onAdd={() => setShowAdd(true)} customers={customers} employees={employees} />}
+        {active === "ภาพรวม" ? <Dashboard done={done} setDone={setDone} onOpenModule={setActive} customers={customers} employees={employees} /> : active === "ตั้งค่า" && role === "owner" ? <SettingsPage key={connectionVersion} onSaved={() => setConnectionVersion(v => v + 1)} /> : <ModuleContent active={active} onAdd={() => setShowAdd(true)} customers={customers} employees={employees} onUpdateStatus={updateCustomerStatus} />}
       </section>
 
       {showAdd && <AddCustomer onClose={() => setShowAdd(false)} onSaved={loadSheetData} />}
@@ -296,9 +307,9 @@ function Metric({icon,label,value,unit,note,tone}:{icon:string,label:string,valu
   return <div className="metric"><div className={`metric-icon ${tone}`}>{icon}</div><div><span>{label}</span><strong>{value} <small>{unit}</small></strong><p>{note}</p></div></div>;
 }
 
-function ModuleContent({active,onAdd,customers,employees}:{active:string;onAdd:()=>void;customers:Customer[];employees:Employee[]}) {
+function ModuleContent({active,onAdd,customers,employees,onUpdateStatus}:{active:string;onAdd:()=>void;customers:Customer[];employees:Employee[];onUpdateStatus:(customerId:string,status:string)=>Promise<void>}) {
   if(active === "ลูกค้า") return <DataModule title="ฐานข้อมูลลูกค้า" subtitle={`ข้อมูล ${customers.length} รายจากฐานข้อมูลที่เชื่อมต่อ`} action="＋ เพิ่มลูกค้า" onAction={onAdd} headers={["รหัส","ลูกค้า","เบอร์โทร","บริการล่าสุด","เข้ารับบริการ","ติดตามครั้งถัดไป","สถานะ"]} rows={customers.map(c=>[c.id,c.name,c.phone,c.service,c.last,c.follow,c.status])}/>;
-  if(active === "ติดตามลูกค้า") return <FollowUpModule customers={customers}/>;
+  if(active === "ติดตามลูกค้า") return <FollowUpModule customers={customers} onUpdateStatus={onUpdateStatus}/>;
   if(active === "นัดหมาย") return <DataModule title="ตารางนัดหมาย" subtitle="นัดหมายวันนี้และ 7 วันข้างหน้า" headers={["เวลา/วันที่","ลูกค้า","บริการ","ผู้ดูแล","สถานะ"]} rows={customers.slice(4,12).map((c,i)=>[["วันนี้ 10:00","วันนี้ 11:30","วันนี้ 14:00","วันนี้ 16:30","18 ก.ค. 11:00","20 ก.ค. 13:30","22 ก.ค. 15:00","24 ก.ค. 17:00"][i],c.name,c.service,["คุณนุ่น","คุณฝน","พญ. รวี"][i%3],c.status])}/>;
   if(active === "การเงิน") return <DataModule title="รายรับและธุรกรรม" subtitle="ยอดจำลองวันนี้ 37,100 บาท · ยังไม่ใช่ข้อมูลบัญชีจริง" headers={["เลขที่","ลูกค้า","รายการ","ยอด (บาท)","สถานะ"]} rows={mockTransactions}/>;
   if(active === "พนักงาน") return <DataModule title="พนักงานและเวลาเข้างาน" subtitle={`พนักงาน ${employees.length} คนจากฐานข้อมูลที่เชื่อมต่อ`} headers={["รหัส","ชื่อ","ตำแหน่ง","กะงาน","เวลาเข้า","สถานะ"]} rows={employees.map(e=>[e.id,e.name,e.position,e.shift,e.attendance,e.status])}/>;
@@ -307,7 +318,7 @@ function ModuleContent({active,onAdd,customers,employees}:{active:string;onAdd:(
   return <DataModule title={active} subtitle="โมดูลพร้อมใช้งาน" headers={["สถานะ"]} rows={[["พร้อมใช้งาน"]]}/>;
 }
 
-function FollowUpModule({customers:sourceCustomers}:{customers:Customer[]}) {
+function FollowUpModule({customers:sourceCustomers,onUpdateStatus}:{customers:Customer[];onUpdateStatus:(customerId:string,status:string)=>Promise<void>}) {
   const [search,setSearch]=useState("");
   const [statusFilter,setStatusFilter]=useState("ทั้งหมด");
   const [ownerFilter,setOwnerFilter]=useState("ทั้งหมด");
@@ -344,8 +355,21 @@ function FollowUpModule({customers:sourceCustomers}:{customers:Customer[]}) {
       <button className="clear-filter" onClick={clearFilters}>ล้างตัวกรอง</button>
     </div>
     <div className="result-bar"><div><b>{visibleCustomers.length}</b><span> รายการที่พบ</span></div><span>{statusFilter==="ทั้งหมด"?"ทุกสถานะ":`สถานะ: ${statusFilter}`}</span></div>
-    <div className="data-table-wrap"><table className="data-table"><thead><tr>{["รหัส","ลูกค้า","เบอร์โทร","บริการ","เข้าคลินิกล่าสุด","กำหนดติดตาม","ผู้ดูแล","สถานะ"].map(header=><th key={header}>{header}</th>)}</tr></thead><tbody>{visibleCustomers.map(customer=><tr key={customer.id}><td>{customer.id}</td><td><b>{customer.name}</b></td><td>{customer.phone}</td><td>{customer.service}</td><td>{customer.last}</td><td>{customer.follow}</td><td>{customer.owner}</td><td><span className={`status-pill status-${customer.status}`}>{customer.status}</span></td></tr>)}</tbody></table>{visibleCustomers.length===0&&<div className="empty-result">ไม่พบลูกค้าตามเงื่อนไขที่เลือก</div>}</div>
+    <div className="data-table-wrap"><table className="data-table"><thead><tr>{["รหัส","ลูกค้า","เบอร์โทร","บริการ","เข้าคลินิกล่าสุด","กำหนดติดตาม","ผู้ดูแล","สถานะ","กิจกรรม"].map(header=><th key={header}>{header}</th>)}</tr></thead><tbody>{visibleCustomers.map(customer=><tr key={customer.id}><td>{customer.id}</td><td><b>{customer.name}</b></td><td>{customer.phone}</td><td>{customer.service}</td><td>{customer.last}</td><td>{customer.follow}</td><td>{customer.owner}</td><td><span className={`status-pill status-${customer.status}`}>{customer.status}</span></td><td><CustomerStatusAction customer={customer} onUpdateStatus={onUpdateStatus}/></td></tr>)}</tbody></table>{visibleCustomers.length===0&&<div className="empty-result">ไม่พบลูกค้าตามเงื่อนไขที่เลือก</div>}</div>
   </section>;
+}
+
+function CustomerStatusAction({customer,onUpdateStatus}:{customer:Customer;onUpdateStatus:(customerId:string,status:string)=>Promise<void>}) {
+  const [nextStatus,setNextStatus]=useState(customer.status);
+  const [saving,setSaving]=useState(false);
+  const [message,setMessage]=useState("");
+  async function save(status:string) {
+    setSaving(true);setMessage("");
+    try{await onUpdateStatus(customer.id,status);setNextStatus(status);setMessage("บันทึกแล้ว");}
+    catch(error){setMessage(error instanceof Error?error.message:"บันทึกไม่สำเร็จ");}
+    finally{setSaving(false);}
+  }
+  return <div className="status-action"><select value={nextStatus} onChange={event=>setNextStatus(event.target.value)} disabled={saving}>{["ด่วน","เกินกำหนด","รอติดตาม","รอยืนยัน","นัดแล้ว","สำเร็จ"].map(status=><option key={status}>{status}</option>)}</select><button onClick={()=>void save(nextStatus)} disabled={saving||nextStatus===customer.status}>{saving?"...":"บันทึก"}</button>{customer.status!=="สำเร็จ"&&<button className="complete-action" onClick={()=>void save("สำเร็จ")} disabled={saving}>✓ ติดตามแล้ว</button>}{message&&<small>{message}</small>}</div>;
 }
 
 function DataModule({title,subtitle,headers,rows,action,onAction}:{title:string;subtitle:string;headers:string[];rows:string[][];action?:string;onAction?:()=>void}) {
