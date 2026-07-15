@@ -232,7 +232,7 @@ function Dashboard({ done, setDone, onOpenModule }: { done: string[]; setDone: (
 
     <section className="bottom-grid">
       <div className="panel chart-panel"><div className="panel-head"><div><h3>ภาพรวมรายรับ</h3><p>7 วันที่ผ่านมา</p></div><b className="total">฿ 286,400</b></div><div className="bars">{[48,62,42,78,70,88,58].map((h,i)=><div key={i}><span style={{height:`${h}%`}} className={i===5?"hot":""}/><small>{["พฤ","ศ","ส","อา","จ","อ","พ"][i]}</small></div>)}</div></div>
-      <div className="panel team-panel"><div className="panel-head"><div><h3>พนักงานวันนี้</h3><p>เข้างาน 5 จาก 6 คน</p></div><span className="live">● LIVE</span></div><div className="team-avatars"><span>ป</span><span>น</span><span>ฝ</span><span>ม</span><span>อ</span><span className="absent">ล</span></div><div className="attendance"><span><i className="green"/>ตรงเวลา <b>4</b></span><span><i className="amber"/>สาย <b>1</b></span><span><i className="gray"/>ลา <b>1</b></span></div></div>
+      <div className="panel team-panel"><div className="panel-head"><div><h3>พนักงานวันนี้</h3><p>เข้างาน 6 จาก 7 คน</p></div><span className="live">● LIVE</span></div><div className="team-avatars"><span>ร</span><span>ป</span><span>น</span><span>ฝ</span><span>ม</span><span>อ</span><span className="absent">ล</span></div><div className="attendance"><span><i className="green"/>ตรงเวลา <b>5</b></span><span><i className="amber"/>สาย <b>1</b></span><span><i className="gray"/>ลา <b>1</b></span></div></div>
     </section>
   </>;
 }
