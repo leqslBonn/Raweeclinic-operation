@@ -25,6 +25,7 @@ export default function Home() {
   const [active, setActive] = useState("ภาพรวม");
   const [showAdd, setShowAdd] = useState(false);
   const [done, setDone] = useState<string[]>([]);
+  const [connectionVersion, setConnectionVersion] = useState(0);
   const today = useMemo(() => new Intl.DateTimeFormat("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date()), []);
 
   return (
@@ -53,7 +54,7 @@ export default function Home() {
           <div className="header-actions"><button className="icon-btn" aria-label="แจ้งเตือน">♢<i>3</i></button><button className="primary" onClick={() => setShowAdd(true)}>＋ เพิ่มลูกค้าใหม่</button></div>
         </header>
 
-        {active === "ภาพรวม" ? <Dashboard done={done} setDone={setDone} /> : <ModulePlaceholder active={active} onAdd={() => setShowAdd(true)} />}
+        {active === "ภาพรวม" ? <Dashboard done={done} setDone={setDone} /> : active === "ตั้งค่า" ? <SettingsPage key={connectionVersion} onSaved={() => setConnectionVersion(v => v + 1)} /> : <ModulePlaceholder active={active} onAdd={() => setShowAdd(true)} />}
       </section>
 
       {showAdd && <AddCustomer onClose={() => setShowAdd(false)} />}
@@ -116,7 +117,49 @@ function ModulePlaceholder({active,onAdd}:{active:string,onAdd:()=>void}) {
   return <div className="module-page"><div className="module-icon">✦</div><h2>{active}</h2><p>{copy[active]}</p><div className="sample-table"><div><b>โมดูลพร้อมสำหรับเชื่อม Google Sheets</b><span>เวอร์ชันทดลองจะแสดงตัวอย่างขั้นตอนและโครงสร้างข้อมูล</span></div><button onClick={onAdd}>{active === "ลูกค้า" ? "＋ เพิ่มลูกค้า" : "เปิดตัวอย่าง"}</button></div></div>;
 }
 
+const CONNECTION_URL_KEY = "raweeAppsScriptUrl";
+const CONNECTION_API_KEY = "raweeAppsScriptApiKey";
+
+function SettingsPage({onSaved}:{onSaved:()=>void}) {
+  const [url,setUrl]=useState(()=>typeof window === "undefined" ? "" : localStorage.getItem(CONNECTION_URL_KEY) || "");
+  const [apiKey,setApiKey]=useState(()=>typeof window === "undefined" ? "" : localStorage.getItem(CONNECTION_API_KEY) || "");
+  const [message,setMessage]=useState("");
+  const connected=Boolean(url && apiKey);
+  function save(){
+    localStorage.setItem(CONNECTION_URL_KEY,url.trim());
+    localStorage.setItem(CONNECTION_API_KEY,apiKey.trim());
+    setMessage("บันทึกการเชื่อมต่อแล้ว");
+    onSaved();
+  }
+  return <div className="settings-page">
+    <div className="settings-title"><div className="module-icon">⚙</div><div><span className="eyebrow">SYSTEM SETTINGS</span><h2>ตั้งค่าระบบ</h2><p>เชื่อม Google Sheet และควบคุมโมดูลของคลินิก</p></div></div>
+    <div className="connection-card">
+      <div className="connection-head"><div><h3>Google Sheet Connection</h3><p>ฐานข้อมูล: Rawee data · เจ้าของ: rawee.aesthetics3@gmail.com</p></div><span className={connected?"status-connected":"status-waiting"}>{connected?"● พร้อมใช้งาน":"○ รอเชื่อมต่อ"}</span></div>
+      <label>Apps Script Web App URL<input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec"/></label>
+      <label>API Key<input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="รหัสเดียวกับใน Apps Script"/></label>
+      <div className="settings-actions"><button className="primary" onClick={save} disabled={!url.trim()||!apiKey.trim()}>บันทึกการเชื่อมต่อ</button>{message&&<span>{message}</span>}</div>
+    </div>
+    <div className="module-toggles"><h3>โมดูลระบบ</h3>{[["ลูกค้าและ Follow-up",true],["นัดหมาย",true],["รายรับ",true],["พนักงานและเวลาเข้างาน",true],["SOP & Checklist",true],["Stock",false]].map(([n,on])=><div key={String(n)}><span>{n}</span><button className={on?"toggle on":"toggle"} aria-label={`เปิดปิด ${n}`}><i/></button></div>)}</div>
+  </div>;
+}
+
 function AddCustomer({onClose}:{onClose:()=>void}) {
   const [saved,setSaved]=useState(false);
-  return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><div className="modal"><button className="modal-close" onClick={onClose}>×</button>{saved ? <div className="success"><div>✓</div><h2>บันทึกลูกค้าแล้ว</h2><p>ข้อมูลทดลองถูกเพิ่มเรียบร้อย</p><button className="primary" onClick={onClose}>กลับหน้าหลัก</button></div> : <><span className="eyebrow">NEW CUSTOMER</span><h2>เพิ่มลูกค้าใหม่</h2><p>กรอกข้อมูลพื้นฐานก่อน สามารถเพิ่มประวัติบริการภายหลังได้</p><form onSubmit={e=>{e.preventDefault();setSaved(true)}}><label>ชื่อ–นามสกุล<input required placeholder="เช่น สมหญิง ใจดี"/></label><div className="form-grid"><label>ชื่อเล่น<input placeholder="ชื่อเล่น"/></label><label>เบอร์โทร<input required inputMode="tel" placeholder="08x-xxx-xxxx"/></label></div><label>บริการที่สนใจ<select defaultValue=""><option value="" disabled>เลือกบริการ</option><option>Botox</option><option>Filler</option><option>เส้นเลือดขอด</option><option>ทรีตเมนต์ผิว</option></select></label><label>หมายเหตุ<textarea placeholder="ข้อมูลที่ควรทราบ..."/></label><button className="primary form-submit">บันทึกลูกค้า</button></form></>}</div></div>;
+  const [saving,setSaving]=useState(false);
+  const [error,setError]=useState("");
+  const connected=typeof window !== "undefined" && Boolean(localStorage.getItem(CONNECTION_URL_KEY) && localStorage.getItem(CONNECTION_API_KEY));
+  async function submit(e:React.FormEvent<HTMLFormElement>){
+    e.preventDefault(); setSaving(true); setError("");
+    const form=new FormData(e.currentTarget);
+    const url=localStorage.getItem(CONNECTION_URL_KEY)||"";
+    const apiKey=localStorage.getItem(CONNECTION_API_KEY)||"";
+    if(!url||!apiKey){setSaving(false);setError("กรุณาเชื่อม Google Sheet ในเมนูตั้งค่าก่อน");return;}
+    const data={full_name:form.get("full_name"),nickname:form.get("nickname"),phone:form.get("phone"),source:"Web App",consent_contact:form.get("consent_contact")==="on",medical_note:form.get("medical_note")};
+    try{
+      await fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"addCustomer",apiKey,data})});
+      setSaved(true);
+    }catch{setError("ส่งข้อมูลไม่สำเร็จ กรุณาตรวจ URL และลองใหม่");}
+    finally{setSaving(false);}
+  }
+  return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><div className="modal"><button className="modal-close" onClick={onClose}>×</button>{saved ? <div className="success"><div>✓</div><h2>ส่งข้อมูลลูกค้าแล้ว</h2><p>ระบบส่งข้อมูลไปยัง Google Sheet เรียบร้อย</p><button className="primary" onClick={onClose}>กลับหน้าหลัก</button></div> : <><span className="eyebrow">NEW CUSTOMER</span><h2>เพิ่มลูกค้าใหม่</h2><p>{connected?"ข้อมูลจะถูกบันทึกใน Google Sheet ของคลินิก":"ยังไม่เชื่อม Google Sheet — ตั้งค่าได้ที่เมนูตั้งค่า"}</p><form onSubmit={submit}><label>ชื่อ–นามสกุล<input name="full_name" required placeholder="เช่น สมหญิง ใจดี"/></label><div className="form-grid"><label>ชื่อเล่น<input name="nickname" placeholder="ชื่อเล่น"/></label><label>เบอร์โทร<input name="phone" required inputMode="tel" placeholder="08x-xxx-xxxx"/></label></div><label>บริการที่สนใจ<select name="service_interest" defaultValue=""><option value="" disabled>เลือกบริการ</option><option>Botox</option><option>Filler</option><option>เส้นเลือดขอด</option><option>ทรีตเมนต์ผิว</option></select></label><label>หมายเหตุ<textarea name="medical_note" placeholder="ข้อมูลที่ควรทราบ..."/></label><label className="consent"><input name="consent_contact" type="checkbox"/> ลูกค้ายินยอมให้ติดต่อเพื่อนัดหมายและติดตามผล</label>{error&&<p className="form-error">{error}</p>}<button className="primary form-submit" disabled={saving}>{saving?"กำลังบันทึก...":"บันทึกลูกค้า"}</button></form></>}</div></div>;
 }
