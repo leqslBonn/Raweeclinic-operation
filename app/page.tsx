@@ -226,13 +226,54 @@ function Metric({icon,label,value,unit,note,tone}:{icon:string,label:string,valu
 
 function ModuleContent({active,onAdd}:{active:string,onAdd:()=>void}) {
   if(active === "ลูกค้า") return <DataModule title="ฐานข้อมูลลูกค้า" subtitle="ข้อมูลจำลอง 20 ราย · ค้นหาและติดตามประวัติแบบรวมศูนย์" action="＋ เพิ่มลูกค้า" onAction={onAdd} headers={["รหัส","ลูกค้า","เบอร์โทร","บริการล่าสุด","เข้ารับบริการ","ติดตามครั้งถัดไป","สถานะ"]} rows={mockCustomers.map(c=>[c.id,c.name,c.phone,c.service,c.last,c.follow,c.status])}/>;
-  if(active === "ติดตามลูกค้า") return <DataModule title="คิวติดตามลูกค้า" subtitle="เรียงงานที่ต้องดูแลก่อน พร้อมกำหนดผู้รับผิดชอบ" headers={["รหัส","ลูกค้า","บริการ","กำหนดติดตาม","ผู้ดูแล","สถานะ"]} rows={mockCustomers.filter(c=>c.status!=="สำเร็จ").slice(0,12).map((c,i)=>[c.id,c.name,c.service,c.follow,["แป้ง","นุ่น","ฝน","มายด์"][i%4],c.status])}/>;
+  if(active === "ติดตามลูกค้า") return <FollowUpModule/>;
   if(active === "นัดหมาย") return <DataModule title="ตารางนัดหมาย" subtitle="นัดหมายจำลองวันนี้และ 7 วันข้างหน้า" headers={["เวลา/วันที่","ลูกค้า","บริการ","ผู้ดูแล","สถานะ"]} rows={mockCustomers.slice(4,12).map((c,i)=>[["วันนี้ 10:00","วันนี้ 11:30","วันนี้ 14:00","วันนี้ 16:30","18 ก.ค. 11:00","20 ก.ค. 13:30","22 ก.ค. 15:00","24 ก.ค. 17:00"][i],c.name,c.service,["คุณนุ่น","คุณฝน","พญ. รวี"][i%3],c.status])}/>;
   if(active === "การเงิน") return <DataModule title="รายรับและธุรกรรม" subtitle="ยอดจำลองวันนี้ 37,100 บาท · ยังไม่ใช่ข้อมูลบัญชีจริง" headers={["เลขที่","ลูกค้า","รายการ","ยอด (บาท)","สถานะ"]} rows={mockTransactions}/>;
   if(active === "พนักงาน") return <DataModule title="พนักงานและเวลาเข้างาน" subtitle="พนักงานจำลอง 7 คน ครบตำแหน่งหลักของคลินิก" headers={["รหัส","ชื่อ","ตำแหน่ง","กะงาน","เวลาเข้า","สถานะ"]} rows={mockEmployees.map(e=>[e.id,e.name,e.position,e.shift,e.attendance,e.status])}/>;
   if(active === "SOP & Checklist") return <DataModule title="SOP & Checklist" subtitle="ขั้นตอนหลักพร้อมเปิดใช้งานและแก้ไขเพิ่มภายหลัง" headers={["หมวด","รายการตรวจ","ผู้รับผิดชอบ","รอบ","สถานะ"]} rows={[["เปิดคลินิก","ตรวจความสะอาดและอุปกรณ์","แม่บ้าน / Stock","ทุกวัน","พร้อมใช้"],["บริการลูกค้า","ยืนยันประวัติแพ้ยาและ Consent","พยาบาล","ทุกเคส","บังคับ"],["หัตถการ","ถ่ายภาพก่อน–หลังและลง Lot ยา","ผู้ช่วยแพทย์","ทุกเคส","บังคับ"],["Follow-up","ติดต่อหลังบริการตามกำหนด","ที่ปรึกษา","ทุกวัน","พร้อมใช้"],["ปิดคลินิก","สรุปเงินสดและตรวจ Stock","ผู้จัดการ","ทุกวัน","พร้อมใช้"],["ฉุกเฉิน","ตรวจชุดยาและเบอร์ติดต่อฉุกเฉิน","พยาบาล","ทุกสัปดาห์","พร้อมใช้"]]}/>;
   if(active === "Stock") return <DataModule title="Stock คลินิก" subtitle="วัสดุและเวชภัณฑ์จำลอง · แจ้งเตือนเมื่อถึงจุดสั่งซื้อ" headers={["รหัส","รายการ","คงเหลือ","ขั้นต่ำ","สถานะ"]} rows={mockStock}/>;
   return <DataModule title={active} subtitle="โมดูลพร้อมใช้งาน" headers={["สถานะ"]} rows={[["พร้อมใช้งาน"]]}/>;
+}
+
+function FollowUpModule() {
+  const [search,setSearch]=useState("");
+  const [statusFilter,setStatusFilter]=useState("ทั้งหมด");
+  const [ownerFilter,setOwnerFilter]=useState("ทั้งหมด");
+  const [serviceFilter,setServiceFilter]=useState("ทั้งหมด");
+  const [sortBy,setSortBy]=useState("priority");
+  const owners=["แป้ง","นุ่น","ฝน","มายด์"];
+  const customers=useMemo(()=>mockCustomers.map((customer,index)=>({...customer,owner:owners[index%owners.length]})),[]);
+  const statuses=useMemo(()=>Array.from(new Set(customers.map(c=>c.status))),[customers]);
+  const services=useMemo(()=>Array.from(new Set(customers.map(c=>c.service))).sort((a,b)=>a.localeCompare(b,"th")),[customers]);
+  const statusCounts=useMemo(()=>statuses.reduce<Record<string,number>>((result,status)=>{result[status]=customers.filter(c=>c.status===status).length;return result;},{}),[customers,statuses]);
+  const visibleCustomers=useMemo(()=>{
+    const keyword=search.trim().toLocaleLowerCase("th");
+    const priority:Record<string,number>={"เกินกำหนด":0,"ด่วน":1,"รอติดตาม":2,"รอยืนยัน":3,"นัดแล้ว":4,"สำเร็จ":5};
+    return customers.filter(c=>(!keyword||[c.id,c.name,c.phone,c.service].some(value=>value.toLocaleLowerCase("th").includes(keyword)))&&(statusFilter==="ทั้งหมด"||c.status===statusFilter)&&(ownerFilter==="ทั้งหมด"||c.owner===ownerFilter)&&(serviceFilter==="ทั้งหมด"||c.service===serviceFilter)).sort((a,b)=>{
+      if(sortBy==="latest") return parseInt(b.last)-parseInt(a.last);
+      if(sortBy==="oldest") return parseInt(a.last)-parseInt(b.last);
+      if(sortBy==="name") return a.name.localeCompare(b.name,"th");
+      return (priority[a.status]??9)-(priority[b.status]??9)||parseInt(a.last)-parseInt(b.last);
+    });
+  },[customers,search,statusFilter,ownerFilter,serviceFilter,sortBy]);
+  const clearFilters=()=>{setSearch("");setStatusFilter("ทั้งหมด");setOwnerFilter("ทั้งหมด");setServiceFilter("ทั้งหมด");setSortBy("priority");};
+  return <section className="data-module followup-module">
+    <div className="data-module-head"><div><span className="eyebrow">FOLLOW-UP CONTROL</span><h2>คิวติดตามลูกค้า</h2><p>ค้นหา กรองสถานะ และเรียงลำดับงานเพื่อไม่ให้ลูกค้าขาดช่วง</p></div></div>
+    <div className="status-cards">
+      <button className={statusFilter==="ทั้งหมด"?"selected":""} onClick={()=>setStatusFilter("ทั้งหมด")}><b>{customers.length}</b><span>ลูกค้าทั้งหมด</span></button>
+      {statuses.map(status=><button key={status} className={statusFilter===status?"selected":""} onClick={()=>setStatusFilter(status)}><b>{statusCounts[status]}</b><span>{status}</span></button>)}
+    </div>
+    <div className="filter-panel">
+      <label className="search-field"><span>ค้นหาลูกค้า</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ชื่อ เบอร์โทร รหัส หรือบริการ..."/></label>
+      <label><span>สถานะ</span><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>ทั้งหมด</option>{statuses.map(status=><option key={status}>{status}</option>)}</select></label>
+      <label><span>ผู้ดูแล</span><select value={ownerFilter} onChange={e=>setOwnerFilter(e.target.value)}><option>ทั้งหมด</option>{owners.map(owner=><option key={owner}>{owner}</option>)}</select></label>
+      <label><span>บริการ</span><select value={serviceFilter} onChange={e=>setServiceFilter(e.target.value)}><option>ทั้งหมด</option>{services.map(service=><option key={service}>{service}</option>)}</select></label>
+      <label><span>เรียงลำดับ</span><select value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="priority">เร่งด่วนก่อน</option><option value="latest">เข้าคลินิกล่าสุด</option><option value="oldest">เข้าคลินิกเก่าสุด</option><option value="name">ชื่อลูกค้า ก–ฮ</option></select></label>
+      <button className="clear-filter" onClick={clearFilters}>ล้างตัวกรอง</button>
+    </div>
+    <div className="result-bar"><div><b>{visibleCustomers.length}</b><span> รายการที่พบ</span></div><span>{statusFilter==="ทั้งหมด"?"ทุกสถานะ":`สถานะ: ${statusFilter}`}</span></div>
+    <div className="data-table-wrap"><table className="data-table"><thead><tr>{["รหัส","ลูกค้า","เบอร์โทร","บริการ","เข้าคลินิกล่าสุด","กำหนดติดตาม","ผู้ดูแล","สถานะ"].map(header=><th key={header}>{header}</th>)}</tr></thead><tbody>{visibleCustomers.map(customer=><tr key={customer.id}><td>{customer.id}</td><td><b>{customer.name}</b></td><td>{customer.phone}</td><td>{customer.service}</td><td>{customer.last}</td><td>{customer.follow}</td><td>{customer.owner}</td><td><span className={`status-pill status-${customer.status}`}>{customer.status}</span></td></tr>)}</tbody></table>{visibleCustomers.length===0&&<div className="empty-result">ไม่พบลูกค้าตามเงื่อนไขที่เลือก</div>}</div>
+  </section>;
 }
 
 function DataModule({title,subtitle,headers,rows,action,onAction}:{title:string;subtitle:string;headers:string[];rows:string[][];action?:string;onAction?:()=>void}) {
