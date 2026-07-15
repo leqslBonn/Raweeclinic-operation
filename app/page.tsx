@@ -1,6 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+const LOGIN_SESSION_KEY = "raweeClinicAuthenticated";
+const LOGIN_USER_HASH = "45b366c805a84f08dde0fd91988b1d9dbaeb233de67ad72ef6f1b53ba675a794";
+const LOGIN_PASSWORD_HASH = "fa5dc0fcec9cf5359d589e53af7570ffa6ea3a26dab376a3aa042cdd72ff78db";
 
 const navItems = [
   ["ภาพรวม", "⌂"], ["ลูกค้า", "♙"], ["ติดตามลูกค้า", "◎"], ["นัดหมาย", "□"],
@@ -22,11 +26,19 @@ const appointments = [
 ];
 
 export default function Home() {
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [active, setActive] = useState("ภาพรวม");
   const [showAdd, setShowAdd] = useState(false);
   const [done, setDone] = useState<string[]>([]);
   const [connectionVersion, setConnectionVersion] = useState(0);
   const today = useMemo(() => new Intl.DateTimeFormat("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date()), []);
+
+  useEffect(() => {
+    setAuthenticated(sessionStorage.getItem(LOGIN_SESSION_KEY) === "yes");
+  }, []);
+
+  if (authenticated === null) return <div className="login-loading">กำลังเปิดระบบ...</div>;
+  if (!authenticated) return <LoginPage onLogin={() => setAuthenticated(true)} />;
 
   return (
     <main className="app-shell">
@@ -45,7 +57,7 @@ export default function Home() {
           ))}
         </nav>
         <div className="clinic-card"><span className="pulse"/><div><b>Rawee Clinic</b><small>ระบบพร้อมใช้งาน</small></div></div>
-        <div className="user"><div className="avatar">ร</div><div><b>คุณรวี</b><small>เจ้าของคลินิก</small></div><span>⋮</span></div>
+        <div className="user"><div className="avatar">ร</div><div><b>คุณรวี</b><small>เจ้าของคลินิก</small></div><button className="logout-btn" onClick={() => { sessionStorage.removeItem(LOGIN_SESSION_KEY); setAuthenticated(false); }}>ออก</button></div>
       </aside>
 
       <section className="workspace">
@@ -60,6 +72,49 @@ export default function Home() {
       {showAdd && <AddCustomer onClose={() => setShowAdd(false)} />}
     </main>
   );
+}
+
+async function sha256(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function LoginPage({ onLogin }: { onLogin: () => void }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [checking, setChecking] = useState(false);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setChecking(true);
+    setError("");
+    const [userHash, passwordHash] = await Promise.all([sha256(username.trim()), sha256(password)]);
+    if (userHash === LOGIN_USER_HASH && passwordHash === LOGIN_PASSWORD_HASH) {
+      sessionStorage.setItem(LOGIN_SESSION_KEY, "yes");
+      onLogin();
+    } else {
+      setError("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
+    }
+    setChecking(false);
+  }
+
+  return <main className="login-page">
+    <section className="login-card">
+      <div className="login-brand-mark">R<span>✦</span></div>
+      <p className="login-eyebrow">RAWEE AESTHETIC CLINIC</p>
+      <h1>Customer Follow Up</h1>
+      <p className="login-intro">กรุณาเข้าสู่ระบบสำหรับเจ้าของคลินิกและพนักงาน</p>
+      <form onSubmit={submit}>
+        <label>ชื่อผู้ใช้<input value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" required placeholder="กรอกชื่อผู้ใช้" /></label>
+        <label>รหัสผ่าน<input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required placeholder="กรอกรหัสผ่าน" /></label>
+        {error && <p className="login-error">{error}</p>}
+        <button className="primary login-submit" disabled={checking}>{checking ? "กำลังตรวจสอบ..." : "เข้าสู่ระบบ"}</button>
+      </form>
+      <small className="login-help">หากลืมรหัสผ่าน กรุณาติดต่อเจ้าของคลินิก</small>
+    </section>
+  </main>;
 }
 
 function Dashboard({ done, setDone }: { done: string[]; setDone: (v: string[]) => void }) {
