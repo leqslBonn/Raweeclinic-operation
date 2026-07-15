@@ -120,7 +120,7 @@ export default function Home() {
           <div className="header-actions"><button className="icon-btn" aria-label="แจ้งเตือน">♢<i>3</i></button><button className="primary" onClick={() => setShowAdd(true)}>＋ เพิ่มลูกค้าใหม่</button></div>
         </header>
 
-        {active === "ภาพรวม" ? <Dashboard done={done} setDone={setDone} /> : active === "ตั้งค่า" && role === "owner" ? <SettingsPage key={connectionVersion} onSaved={() => setConnectionVersion(v => v + 1)} /> : <ModuleContent active={active} onAdd={() => setShowAdd(true)} />}
+        {active === "ภาพรวม" ? <Dashboard done={done} setDone={setDone} onOpenModule={setActive} /> : active === "ตั้งค่า" && role === "owner" ? <SettingsPage key={connectionVersion} onSaved={() => setConnectionVersion(v => v + 1)} /> : <ModuleContent active={active} onAdd={() => setShowAdd(true)} />}
       </section>
 
       {showAdd && <AddCustomer onClose={() => setShowAdd(false)} />}
@@ -174,7 +174,13 @@ function LoginPage({ onLogin }: { onLogin: (role: UserRole) => void }) {
   </main>;
 }
 
-function Dashboard({ done, setDone }: { done: string[]; setDone: (v: string[]) => void }) {
+function Dashboard({ done, setDone, onOpenModule }: { done: string[]; setDone: (v: string[]) => void; onOpenModule: (module:string) => void }) {
+  const [selectedStatus,setSelectedStatus]=useState("ทั้งหมด");
+  const dashboardStatuses=["ด่วน","เกินกำหนด","รอติดตาม","รอยืนยัน","นัดแล้ว","สำเร็จ"];
+  const statusCounts=dashboardStatuses.reduce<Record<string,number>>((result,status)=>{result[status]=mockCustomers.filter(customer=>customer.status===status).length;return result;},{});
+  const visibleStatusCustomers=selectedStatus==="ทั้งหมด"?mockCustomers:mockCustomers.filter(customer=>customer.status===selectedStatus);
+  const revenue=mockTransactions.reduce((sum,row)=>sum+Number(row[3].replace(",","")),0).toLocaleString("th-TH");
+  const openFollowUps=statusCounts["ด่วน"]+statusCounts["เกินกำหนด"]+statusCounts["รอติดตาม"];
   return <>
     <section className="hero-strip">
       <div><span className="eyebrow">GOOD MORNING</span><h2>วันนี้มีลูกค้ารอการดูแล <em>4 ราย</em></h2><p>ติดตามให้ครบ เพื่อประสบการณ์ที่ดีที่สุดของลูกค้า</p></div>
@@ -182,15 +188,26 @@ function Dashboard({ done, setDone }: { done: string[]; setDone: (v: string[]) =
     </section>
 
     <section className="metrics">
-      <Metric icon="♙" label="ลูกค้าวันนี้" value="12" note="↑ 20% จากเมื่อวาน" tone="rose" />
-      <Metric icon="฿" label="รายรับวันนี้" value="48,500" unit="บาท" note="↑ 12.5% จากเฉลี่ย" tone="gold" />
-      <Metric icon="◎" label="ต้องติดตาม" value={`${4 - done.length}`} note={done.length ? `ทำแล้ว ${done.length} ราย` : "มี 1 รายเลยกำหนด"} tone="purple" />
+      <Metric icon="♙" label="ลูกค้าทั้งระบบ" value={String(mockCustomers.length)} note="ข้อมูลจำลองสำหรับตรวจระบบ" tone="rose" />
+      <Metric icon="฿" label="รายรับวันนี้" value={revenue} unit="บาท" note={`${mockTransactions.length} ธุรกรรม`} tone="gold" />
+      <Metric icon="◎" label="ต้องติดตาม" value={String(openFollowUps-done.length)} note={`ด่วน ${statusCounts["ด่วน"]} · เกินกำหนด ${statusCounts["เกินกำหนด"]}`} tone="purple" />
       <Metric icon="□" label="นัดหมาย" value="8" note="ยืนยันแล้ว 6 ราย" tone="sage" />
+    </section>
+
+    <section className="dashboard-status-panel panel">
+      <div className="panel-head"><div><h3>สถานะลูกค้าปัจจุบัน</h3><p>กดสถานะเพื่อเรียกดูรายชื่อลูกค้า · รวม {mockCustomers.length} ราย</p></div><button className="text-btn" onClick={()=>onOpenModule("ติดตามลูกค้า")}>เปิดศูนย์ติดตาม →</button></div>
+      <div className="dashboard-status-cards">
+        <button className={selectedStatus==="ทั้งหมด"?"active":""} onClick={()=>setSelectedStatus("ทั้งหมด")}><b>{mockCustomers.length}</b><span>ทั้งหมด</span></button>
+        {dashboardStatuses.map(status=><button key={status} className={selectedStatus===status?"active":status==="เกินกำหนด"||status==="ด่วน"?"attention":""} onClick={()=>setSelectedStatus(status)}><b>{statusCounts[status]}</b><span>{status}</span></button>)}
+      </div>
+      <div className="dashboard-status-result"><b>{selectedStatus==="ทั้งหมด"?"ลูกค้าทุกสถานะ":`ลูกค้าสถานะ ${selectedStatus}`}</b><span>{visibleStatusCustomers.length} ราย</span></div>
+      <div className="dashboard-customer-list">{visibleStatusCustomers.slice(0,8).map(customer=><button key={customer.id} onClick={()=>onOpenModule("ติดตามลูกค้า")}><span className="mini-avatar">{customer.name.slice(-1)}</span><span><b>{customer.name}</b><small>{customer.service} · เข้าล่าสุด {customer.last}</small></span><i>{customer.status}</i></button>)}</div>
+      {visibleStatusCustomers.length>8&&<button className="dashboard-more" onClick={()=>onOpenModule("ติดตามลูกค้า")}>ดูอีก {visibleStatusCustomers.length-8} รายในหน้าติดตามลูกค้า →</button>}
     </section>
 
     <section className="content-grid">
       <div className="panel follow-panel">
-        <div className="panel-head"><div><h3>ติดตามลูกค้าวันนี้</h3><p>เรียงตามความเร่งด่วน</p></div><button className="text-btn">ดูทั้งหมด →</button></div>
+        <div className="panel-head"><div><h3>ติดตามลูกค้าวันนี้</h3><p>เรียงตามความเร่งด่วน</p></div><button className="text-btn" onClick={()=>onOpenModule("ติดตามลูกค้า")}>ดูทั้งหมด →</button></div>
         <div className="follow-list">
           {followUps.map((item) => <div className={`follow-row ${done.includes(item.name) ? "completed" : ""}`} key={item.name}>
             <button className="check" aria-label={`ติดตาม ${item.name} สำเร็จ`} onClick={() => setDone(done.includes(item.name) ? done.filter(x => x !== item.name) : [...done, item.name])}>{done.includes(item.name) ? "✓" : ""}</button>
@@ -209,7 +226,7 @@ function Dashboard({ done, setDone }: { done: string[]; setDone: (v: string[]) =
             <b className="time">{a.time}</b><div className="line"/><div><strong>{a.name}</strong><span>{a.service}</span></div><small className={a.status === "ยืนยันแล้ว" ? "confirmed" : "waiting"}>{a.status}</small>
           </div>)}
         </div>
-        <button className="outline-wide">＋ เพิ่มนัดหมาย</button>
+        <button className="outline-wide" onClick={()=>onOpenModule("นัดหมาย")}>＋ เพิ่มนัดหมาย</button>
       </div>
     </section>
 
