@@ -1,0 +1,12 @@
+[build]
+  command = "npx vite build --config netlify.vite.config.ts"
+  publish = "netlify-dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
