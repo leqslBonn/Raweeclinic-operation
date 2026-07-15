@@ -140,13 +140,9 @@ export default function Home() {
   }, []);
 
   async function loadSheetData() {
-    const url=localStorage.getItem(CONNECTION_URL_KEY)||"";
-    const apiKey=localStorage.getItem(CONNECTION_API_KEY)||"";
-    if(!url||!apiKey){setDataStatus("mock");return;}
     setDataStatus("loading");
     try{
-      const response=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"getSystemData",apiKey})});
-      const result=await response.json();
+      const result=await callRaweeApi("getSystemData");
       if(!result.ok) throw new Error(result.error||"โหลดข้อมูลไม่สำเร็จ");
       setCustomers((result.customers||[]).map((record:Record<string,unknown>,index:number)=>normalizeCustomer(record,index)));
       setEmployees((result.employees||[]).filter((record:Record<string,unknown>)=>record.active!==false&&String(record.work_status||"")!=="Archived").map((record:Record<string,unknown>,index:number)=>normalizeEmployee(record,index)));
@@ -160,22 +156,14 @@ export default function Home() {
   }
 
   async function updateCustomerStatus(customerId:string,status:string) {
-    const url=localStorage.getItem(CONNECTION_URL_KEY)||"";
-    const apiKey=localStorage.getItem(CONNECTION_API_KEY)||"";
-    if(!url||!apiKey) throw new Error("กรุณาเชื่อม Google Sheet ก่อน");
-    const response=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"recordCustomerActivity",apiKey,data:{customer_id:customerId,status,note:`ปรับสถานะเป็น ${status}`,channel:"Web App",performed_by:role==="owner"?"Rawee":"Staff"}})});
-    const result=await response.json();
+    const result=await callRaweeApi("recordCustomerActivity",{customer_id:customerId,status,note:`ปรับสถานะเป็น ${status}`,channel:"Web App",performed_by:role==="owner"?"Rawee":"Staff"});
     if(!result.ok) throw new Error(result.error||"บันทึกสถานะไม่สำเร็จ");
     setCustomers(current=>current.map(customer=>customer.id===customerId?{...customer,status}:customer));
     await loadSheetData();
   }
 
   async function saveOperationalRecord(action:string,data:RawRecord) {
-    const url=localStorage.getItem(CONNECTION_URL_KEY)||"";
-    const apiKey=localStorage.getItem(CONNECTION_API_KEY)||"";
-    if(!url||!apiKey) throw new Error("กรุณาเชื่อม Google Sheet ก่อน");
-    const response=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,apiKey,data})});
-    const result=await response.json();
+    const result=await callRaweeApi(action,data);
     if(!result.ok) throw new Error(result.error||"บันทึกข้อมูลไม่สำเร็จ");
     await loadSheetData();
   }
@@ -464,11 +452,23 @@ const CONNECTION_URL_KEY = "raweeAppsScriptUrl";
 const CONNECTION_API_KEY = "raweeAppsScriptApiKey";
 const RAW_DATA_SHEET_URL = "https://docs.google.com/spreadsheets/d/1wA-u9CkCVDQ88LIl1P9cNMFaNBF6c6A2DuQsYV9adR8/edit";
 
+async function callRaweeApi(action:string,data:RawRecord={}) {
+  const hosted=typeof window!=="undefined"&&window.location.hostname.endsWith("netlify.app");
+  const url=hosted?"/api/rawee":localStorage.getItem(CONNECTION_URL_KEY)||"";
+  const apiKey=hosted?"":localStorage.getItem(CONNECTION_API_KEY)||"";
+  if(!url) throw new Error("กรุณาเชื่อม Google Sheet ก่อน");
+  const response=await fetch(url,{method:"POST",headers:{"Content-Type":hosted?"application/json":"text/plain;charset=utf-8"},body:JSON.stringify(hosted?{action,data}:{action,data,apiKey})});
+  const result=await response.json();
+  if(!response.ok||!result.ok) throw new Error(result.error||"เชื่อม Google Sheet ไม่สำเร็จ");
+  return result;
+}
+
 function SettingsPage({onSaved}:{onSaved:()=>void}) {
+  const hosted=typeof window!=="undefined"&&window.location.hostname.endsWith("netlify.app");
   const [url,setUrl]=useState(()=>typeof window === "undefined" ? "" : localStorage.getItem(CONNECTION_URL_KEY) || "");
   const [apiKey,setApiKey]=useState(()=>typeof window === "undefined" ? "" : localStorage.getItem(CONNECTION_API_KEY) || "");
   const [message,setMessage]=useState("");
-  const connected=Boolean(url && apiKey);
+  const connected=hosted||Boolean(url && apiKey);
   function save(){
     localStorage.setItem(CONNECTION_URL_KEY,url.trim());
     localStorage.setItem(CONNECTION_API_KEY,apiKey.trim());
@@ -479,10 +479,9 @@ function SettingsPage({onSaved}:{onSaved:()=>void}) {
     <div className="settings-title"><div className="module-icon">⚙</div><div><span className="eyebrow">SYSTEM SETTINGS</span><h2>ตั้งค่าระบบ</h2><p>เชื่อม Google Sheet และควบคุมโมดูลของคลินิก</p></div></div>
     <div className="connection-card">
       <div className="connection-head"><div><h3>Google Sheet Connection</h3><p>ฐานข้อมูล: Rawee data · เจ้าของ: rawee.aesthetics3@gmail.com</p></div><span className={connected?"status-connected":"status-waiting"}>{connected?"● พร้อมใช้งาน":"○ รอเชื่อมต่อ"}</span></div>
-      <label>Apps Script Web App URL<input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec"/></label>
-      <label>API Key<input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="รหัสเดียวกับใน Apps Script"/></label>
+      {hosted?<div className="secure-connection"><b>✓ เชื่อมต่ออัตโนมัติแบบปลอดภัย</b><span>API Key ถูกเก็บไว้ในระบบหลังบ้าน Staff ไม่สามารถเปิดดูหรือแก้ไขได้</span></div>:<><label>Apps Script Web App URL<input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec"/></label><label>API Key<input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="รหัสเดียวกับใน Apps Script"/></label></>}
       <div className="settings-actions">
-        <button className="primary" onClick={save} disabled={!url.trim()||!apiKey.trim()}>บันทึกการเชื่อมต่อ</button>
+        {!hosted&&<button className="primary" onClick={save} disabled={!url.trim()||!apiKey.trim()}>บันทึกการเชื่อมต่อ</button>}
         <a className="sheet-link" href={RAW_DATA_SHEET_URL} target="_blank" rel="noreferrer" aria-label="เปิด Google Sheet Raw Data ในแท็บใหม่">▦ เปิด Google Sheet (Raw Data)</a>
         {message&&<span>{message}</span>}
       </div>
@@ -495,18 +494,13 @@ function AddCustomer({onClose,onSaved}:{onClose:()=>void;onSaved:()=>Promise<voi
   const [saved,setSaved]=useState(false);
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState("");
-  const connected=typeof window !== "undefined" && Boolean(localStorage.getItem(CONNECTION_URL_KEY) && localStorage.getItem(CONNECTION_API_KEY));
+  const connected=typeof window !== "undefined" && (window.location.hostname.endsWith("netlify.app")||Boolean(localStorage.getItem(CONNECTION_URL_KEY) && localStorage.getItem(CONNECTION_API_KEY)));
   async function submit(e:React.FormEvent<HTMLFormElement>){
     e.preventDefault(); setSaving(true); setError("");
     const form=new FormData(e.currentTarget);
-    const url=localStorage.getItem(CONNECTION_URL_KEY)||"";
-    const apiKey=localStorage.getItem(CONNECTION_API_KEY)||"";
-    if(!url||!apiKey){setSaving(false);setError("กรุณาเชื่อม Google Sheet ในเมนูตั้งค่าก่อน");return;}
     const data={full_name:form.get("full_name"),nickname:form.get("nickname"),phone:form.get("phone"),service_interest:form.get("service_interest"),source:"Web App",consent_contact:form.get("consent_contact")==="on",medical_note:form.get("medical_note")};
     try{
-      const response=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"addCustomer",apiKey,data})});
-      const result=await response.json();
-      if(!result.ok) throw new Error(result.error||"SAVE_FAILED");
+      await callRaweeApi("addCustomer",data);
       setSaved(true);
       await onSaved();
     }catch(error){setError(error instanceof Error&&error.message==="DUPLICATE_PHONE"?"มีเบอร์โทรนี้อยู่ในระบบแล้ว":"ส่งข้อมูลไม่สำเร็จ กรุณาตรวจ URL และลองใหม่");}
