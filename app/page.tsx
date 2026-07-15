@@ -366,7 +366,7 @@ function CustomerStatusAction({customer,onUpdateStatus}:{customer:Customer;onUpd
   const [message,setMessage]=useState("");
   async function save(status:string) {
     setSaving(true);setMessage("");
-    try{await onUpdateStatus(customer.id,status);setNextStatus(status);setMessage("บันทึกแล้ว");}
+    try{await onUpdateStatus(customer.id,status);setNextStatus(status);setMessage("✓ อัปเดต Google Sheet แล้ว");}
     catch(error){setMessage(error instanceof Error?error.message:"บันทึกไม่สำเร็จ");}
     finally{setSaving(false);}
   }
@@ -383,6 +383,7 @@ function DataModule({title,subtitle,headers,rows,action,onAction}:{title:string;
 
 const CONNECTION_URL_KEY = "raweeAppsScriptUrl";
 const CONNECTION_API_KEY = "raweeAppsScriptApiKey";
+const RAW_DATA_SHEET_URL = "https://docs.google.com/spreadsheets/d/1wA-u9CkCVDQ88LIl1P9cNMFaNBF6c6A2DuQsYV9adR8/edit";
 
 function SettingsPage({onSaved}:{onSaved:()=>void}) {
   const [url,setUrl]=useState(()=>typeof window === "undefined" ? "" : localStorage.getItem(CONNECTION_URL_KEY) || "");
@@ -401,7 +402,11 @@ function SettingsPage({onSaved}:{onSaved:()=>void}) {
       <div className="connection-head"><div><h3>Google Sheet Connection</h3><p>ฐานข้อมูล: Rawee data · เจ้าของ: rawee.aesthetics3@gmail.com</p></div><span className={connected?"status-connected":"status-waiting"}>{connected?"● พร้อมใช้งาน":"○ รอเชื่อมต่อ"}</span></div>
       <label>Apps Script Web App URL<input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec"/></label>
       <label>API Key<input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="รหัสเดียวกับใน Apps Script"/></label>
-      <div className="settings-actions"><button className="primary" onClick={save} disabled={!url.trim()||!apiKey.trim()}>บันทึกการเชื่อมต่อ</button>{message&&<span>{message}</span>}</div>
+      <div className="settings-actions">
+        <button className="primary" onClick={save} disabled={!url.trim()||!apiKey.trim()}>บันทึกการเชื่อมต่อ</button>
+        <a className="sheet-link" href={RAW_DATA_SHEET_URL} target="_blank" rel="noreferrer" aria-label="เปิด Google Sheet Raw Data ในแท็บใหม่">▦ เปิด Google Sheet (Raw Data)</a>
+        {message&&<span>{message}</span>}
+      </div>
     </div>
     <div className="module-toggles"><h3>โมดูลระบบ</h3>{[["ลูกค้าและ Follow-up",true],["นัดหมาย",true],["รายรับ",true],["พนักงานและเวลาเข้างาน",true],["SOP & Checklist",true],["Stock",true]].map(([n,on])=><div key={String(n)}><span>{n}</span><button className={on?"toggle on":"toggle"} aria-label={`เปิดปิด ${n}`}><i/></button></div>)}</div>
   </div>;
