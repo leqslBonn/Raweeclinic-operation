@@ -101,13 +101,14 @@ function normalizeCustomer(record:Record<string,unknown>,index:number):Customer 
 
 function normalizeEmployee(record:Record<string,unknown>,index:number):Employee {
   const fallback=mockEmployees[index%mockEmployees.length];
+  const workStatus=String(record.status||record.work_status||fallback.status);
   return {
     id:String(record.employee_id||fallback.id),
     name:String(record.full_name||record.name||fallback.name),
     position:String(record.position||record.role||fallback.position),
     shift:String(record.shift||record.shift_time||fallback.shift),
     attendance:String(record.attendance||record.attendance_status||fallback.attendance),
-    status:String(record.status||fallback.status),
+    status:workStatus==="Leave"||workStatus==="ลา"?"ลา":"ปฏิบัติงาน",
   };
 }
 
@@ -137,7 +138,7 @@ export default function Home() {
       const result=await response.json();
       if(!result.ok) throw new Error(result.error||"โหลดข้อมูลไม่สำเร็จ");
       setCustomers((result.customers||[]).map((record:Record<string,unknown>,index:number)=>normalizeCustomer(record,index)));
-      setEmployees((result.employees||[]).map((record:Record<string,unknown>,index:number)=>normalizeEmployee(record,index)));
+      setEmployees((result.employees||[]).filter((record:Record<string,unknown>)=>record.active!==false&&String(record.work_status||"")!=="Archived").map((record:Record<string,unknown>,index:number)=>normalizeEmployee(record,index)));
       setDataStatus("sheet");
     }catch{setDataStatus("error");}
   }
