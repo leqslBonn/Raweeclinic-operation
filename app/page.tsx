@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 
 const LOGIN_SESSION_KEY = "raweeClinicAuthenticated";
-const LOGIN_USER_HASH = "45b366c805a84f08dde0fd91988b1d9dbaeb233de67ad72ef6f1b53ba675a794";
-const LOGIN_PASSWORD_HASH = "fa5dc0fcec9cf5359d589e53af7570ffa6ea3a26dab376a3aa042cdd72ff78db";
+const LOGIN_USER_HASH = "5e00556ac64a0763e7921cbf4841e8fc032c51a839faa53e1acecfa00f29f0d5";
+const LOGIN_PASSWORD_HASH = "e6a363a774e27d7218ac4f5eadfc36fe5e1d94e7e259162dd727babbc6f230d6";
 
 const navItems = [
   ["ภาพรวม", "⌂"], ["ลูกค้า", "♙"], ["ติดตามลูกค้า", "◎"], ["นัดหมาย", "□"],
