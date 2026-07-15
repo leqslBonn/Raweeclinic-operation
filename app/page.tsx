@@ -76,18 +76,73 @@ const mockStock = [
   ["ST007","Serum Vitamin C","9 ขวด","5 ขวด","ปกติ"], ["ST008","หน้ากากอนามัย","3 กล่อง","4 กล่อง","ต้องสั่ง"],
 ];
 
+type Customer = typeof mockCustomers[number];
+type Employee = typeof mockEmployees[number];
+
+function displayDate(value:unknown, fallback:string) {
+  if(!value) return fallback;
+  const date=new Date(String(value));
+  if(Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("th-TH",{day:"numeric",month:"short",year:"2-digit"}).format(date);
+}
+
+function normalizeCustomer(record:Record<string,unknown>,index:number):Customer {
+  const fallback=mockCustomers[index%mockCustomers.length];
+  return {
+    id:String(record.customer_id||fallback.id),
+    name:String(record.full_name||fallback.name),
+    phone:String(record.phone||fallback.phone),
+    service:String(record.service_interest||record.last_service||fallback.service),
+    last:displayDate(record.last_visit_date||record.created_at,fallback.last),
+    follow:displayDate(record.next_followup||record.next_followup_date,fallback.follow),
+    status:String(record.status||fallback.status),
+  };
+}
+
+function normalizeEmployee(record:Record<string,unknown>,index:number):Employee {
+  const fallback=mockEmployees[index%mockEmployees.length];
+  return {
+    id:String(record.employee_id||fallback.id),
+    name:String(record.full_name||record.name||fallback.name),
+    position:String(record.position||record.role||fallback.position),
+    shift:String(record.shift||record.shift_time||fallback.shift),
+    attendance:String(record.attendance||record.attendance_status||fallback.attendance),
+    status:String(record.status||fallback.status),
+  };
+}
+
 export default function Home() {
   const [role, setRole] = useState<UserRole | null | undefined>(undefined);
   const [active, setActive] = useState("ภาพรวม");
   const [showAdd, setShowAdd] = useState(false);
   const [done, setDone] = useState<string[]>([]);
   const [connectionVersion, setConnectionVersion] = useState(0);
+  const [customers,setCustomers]=useState<Customer[]>(mockCustomers);
+  const [employees,setEmployees]=useState<Employee[]>(mockEmployees);
+  const [dataStatus,setDataStatus]=useState<"mock"|"loading"|"sheet"|"error">("mock");
   const today = useMemo(() => new Intl.DateTimeFormat("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date()), []);
 
   useEffect(() => {
     const savedRole = sessionStorage.getItem(LOGIN_SESSION_KEY);
     setRole(savedRole === "owner" || savedRole === "staff" ? savedRole : null);
   }, []);
+
+  async function loadSheetData() {
+    const url=localStorage.getItem(CONNECTION_URL_KEY)||"";
+    const apiKey=localStorage.getItem(CONNECTION_API_KEY)||"";
+    if(!url||!apiKey){setDataStatus("mock");return;}
+    setDataStatus("loading");
+    try{
+      const response=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"getSystemData",apiKey})});
+      const result=await response.json();
+      if(!result.ok) throw new Error(result.error||"โหลดข้อมูลไม่สำเร็จ");
+      setCustomers((result.customers||[]).map((record:Record<string,unknown>,index:number)=>normalizeCustomer(record,index)));
+      setEmployees((result.employees||[]).map((record:Record<string,unknown>,index:number)=>normalizeEmployee(record,index)));
+      setDataStatus("sheet");
+    }catch{setDataStatus("error");}
+  }
+
+  useEffect(()=>{if(role) void loadSheetData();},[role,connectionVersion]);
 
   if (role === undefined) return <div className="login-loading">กำลังเปิดระบบ...</div>;
   if (role === null) return <LoginPage onLogin={setRole} />;
@@ -117,13 +172,13 @@ export default function Home() {
       <section className="workspace">
         <header>
           <div><h1>{active}</h1><p>{today} · สาขาคลองสาม</p></div>
-          <div className="header-actions"><button className="icon-btn" aria-label="แจ้งเตือน">♢<i>3</i></button><button className="primary" onClick={() => setShowAdd(true)}>＋ เพิ่มลูกค้าใหม่</button></div>
+          <div className="header-actions"><span className={`data-source ${dataStatus}`}>{dataStatus==="sheet"?"● Google Sheet":dataStatus==="loading"?"กำลังโหลด...":dataStatus==="error"?"○ รออัปเดต Apps Script":"○ ข้อมูลตัวอย่าง"}</span><button className="icon-btn" aria-label="โหลดข้อมูลใหม่" title="โหลดข้อมูลจาก Google Sheet ใหม่" onClick={()=>void loadSheetData()}>↻</button><button className="primary" onClick={() => setShowAdd(true)}>＋ เพิ่มลูกค้าใหม่</button></div>
         </header>
 
-        {active === "ภาพรวม" ? <Dashboard done={done} setDone={setDone} onOpenModule={setActive} /> : active === "ตั้งค่า" && role === "owner" ? <SettingsPage key={connectionVersion} onSaved={() => setConnectionVersion(v => v + 1)} /> : <ModuleContent active={active} onAdd={() => setShowAdd(true)} />}
+        {active === "ภาพรวม" ? <Dashboard done={done} setDone={setDone} onOpenModule={setActive} customers={customers} employees={employees} /> : active === "ตั้งค่า" && role === "owner" ? <SettingsPage key={connectionVersion} onSaved={() => setConnectionVersion(v => v + 1)} /> : <ModuleContent active={active} onAdd={() => setShowAdd(true)} customers={customers} employees={employees} />}
       </section>
 
-      {showAdd && <AddCustomer onClose={() => setShowAdd(false)} />}
+      {showAdd && <AddCustomer onClose={() => setShowAdd(false)} onSaved={loadSheetData} />}
     </main>
   );
 }
@@ -174,11 +229,11 @@ function LoginPage({ onLogin }: { onLogin: (role: UserRole) => void }) {
   </main>;
 }
 
-function Dashboard({ done, setDone, onOpenModule }: { done: string[]; setDone: (v: string[]) => void; onOpenModule: (module:string) => void }) {
+function Dashboard({ done, setDone, onOpenModule, customers, employees }: { done: string[]; setDone: (v: string[]) => void; onOpenModule: (module:string) => void; customers:Customer[]; employees:Employee[] }) {
   const [selectedStatus,setSelectedStatus]=useState("ทั้งหมด");
   const dashboardStatuses=["ด่วน","เกินกำหนด","รอติดตาม","รอยืนยัน","นัดแล้ว","สำเร็จ"];
-  const statusCounts=dashboardStatuses.reduce<Record<string,number>>((result,status)=>{result[status]=mockCustomers.filter(customer=>customer.status===status).length;return result;},{});
-  const visibleStatusCustomers=selectedStatus==="ทั้งหมด"?mockCustomers:mockCustomers.filter(customer=>customer.status===selectedStatus);
+  const statusCounts=dashboardStatuses.reduce<Record<string,number>>((result,status)=>{result[status]=customers.filter(customer=>customer.status===status).length;return result;},{});
+  const visibleStatusCustomers=selectedStatus==="ทั้งหมด"?customers:customers.filter(customer=>customer.status===selectedStatus);
   const revenue=mockTransactions.reduce((sum,row)=>sum+Number(row[3].replace(",","")),0).toLocaleString("th-TH");
   const openFollowUps=statusCounts["ด่วน"]+statusCounts["เกินกำหนด"]+statusCounts["รอติดตาม"];
   return <>
@@ -188,16 +243,16 @@ function Dashboard({ done, setDone, onOpenModule }: { done: string[]; setDone: (
     </section>
 
     <section className="metrics">
-      <Metric icon="♙" label="ลูกค้าทั้งระบบ" value={String(mockCustomers.length)} note="ข้อมูลจำลองสำหรับตรวจระบบ" tone="rose" />
+      <Metric icon="♙" label="ลูกค้าทั้งระบบ" value={String(customers.length)} note="อัปเดตจากฐานข้อมูลที่เชื่อมต่อ" tone="rose" />
       <Metric icon="฿" label="รายรับวันนี้" value={revenue} unit="บาท" note={`${mockTransactions.length} ธุรกรรม`} tone="gold" />
       <Metric icon="◎" label="ต้องติดตาม" value={String(openFollowUps-done.length)} note={`ด่วน ${statusCounts["ด่วน"]} · เกินกำหนด ${statusCounts["เกินกำหนด"]}`} tone="purple" />
       <Metric icon="□" label="นัดหมาย" value="8" note="ยืนยันแล้ว 6 ราย" tone="sage" />
     </section>
 
     <section className="dashboard-status-panel panel">
-      <div className="panel-head"><div><h3>สถานะลูกค้าปัจจุบัน</h3><p>กดสถานะเพื่อเรียกดูรายชื่อลูกค้า · รวม {mockCustomers.length} ราย</p></div><button className="text-btn" onClick={()=>onOpenModule("ติดตามลูกค้า")}>เปิดศูนย์ติดตาม →</button></div>
+      <div className="panel-head"><div><h3>สถานะลูกค้าปัจจุบัน</h3><p>กดสถานะเพื่อเรียกดูรายชื่อลูกค้า · รวม {customers.length} ราย</p></div><button className="text-btn" onClick={()=>onOpenModule("ติดตามลูกค้า")}>เปิดศูนย์ติดตาม →</button></div>
       <div className="dashboard-status-cards">
-        <button className={selectedStatus==="ทั้งหมด"?"active":""} onClick={()=>setSelectedStatus("ทั้งหมด")}><b>{mockCustomers.length}</b><span>ทั้งหมด</span></button>
+        <button className={selectedStatus==="ทั้งหมด"?"active":""} onClick={()=>setSelectedStatus("ทั้งหมด")}><b>{customers.length}</b><span>ทั้งหมด</span></button>
         {dashboardStatuses.map(status=><button key={status} className={selectedStatus===status?"active":status==="เกินกำหนด"||status==="ด่วน"?"attention":""} onClick={()=>setSelectedStatus(status)}><b>{statusCounts[status]}</b><span>{status}</span></button>)}
       </div>
       <div className="dashboard-status-result"><b>{selectedStatus==="ทั้งหมด"?"ลูกค้าทุกสถานะ":`ลูกค้าสถานะ ${selectedStatus}`}</b><span>{visibleStatusCustomers.length} ราย</span></div>
@@ -232,7 +287,7 @@ function Dashboard({ done, setDone, onOpenModule }: { done: string[]; setDone: (
 
     <section className="bottom-grid">
       <div className="panel chart-panel"><div className="panel-head"><div><h3>ภาพรวมรายรับ</h3><p>7 วันที่ผ่านมา</p></div><b className="total">฿ 286,400</b></div><div className="bars">{[48,62,42,78,70,88,58].map((h,i)=><div key={i}><span style={{height:`${h}%`}} className={i===5?"hot":""}/><small>{["พฤ","ศ","ส","อา","จ","อ","พ"][i]}</small></div>)}</div></div>
-      <div className="panel team-panel"><div className="panel-head"><div><h3>พนักงานวันนี้</h3><p>เข้างาน 6 จาก 7 คน</p></div><span className="live">● LIVE</span></div><div className="team-avatars"><span>ร</span><span>ป</span><span>น</span><span>ฝ</span><span>ม</span><span>อ</span><span className="absent">ล</span></div><div className="attendance"><span><i className="green"/>ตรงเวลา <b>5</b></span><span><i className="amber"/>สาย <b>1</b></span><span><i className="gray"/>ลา <b>1</b></span></div></div>
+      <div className="panel team-panel"><div className="panel-head"><div><h3>พนักงานวันนี้</h3><p>เข้างาน {employees.filter(employee=>employee.status!=="ลา").length} จาก {employees.length} คน</p></div><span className="live">● LIVE</span></div><div className="team-avatars">{employees.map(employee=><span key={employee.id} className={employee.status==="ลา"?"absent":""}>{employee.name.replace("คุณ","").replace("พญ. ","").slice(0,1)}</span>)}</div><div className="attendance"><span><i className="green"/>ตรงเวลา <b>{employees.filter(employee=>employee.attendance==="ตรงเวลา").length}</b></span><span><i className="amber"/>สาย <b>{employees.filter(employee=>employee.attendance.includes("สาย")).length}</b></span><span><i className="gray"/>ลา <b>{employees.filter(employee=>employee.status==="ลา").length}</b></span></div></div>
     </section>
   </>;
 }
@@ -241,25 +296,25 @@ function Metric({icon,label,value,unit,note,tone}:{icon:string,label:string,valu
   return <div className="metric"><div className={`metric-icon ${tone}`}>{icon}</div><div><span>{label}</span><strong>{value} <small>{unit}</small></strong><p>{note}</p></div></div>;
 }
 
-function ModuleContent({active,onAdd}:{active:string,onAdd:()=>void}) {
-  if(active === "ลูกค้า") return <DataModule title="ฐานข้อมูลลูกค้า" subtitle="ข้อมูลจำลอง 20 ราย · ค้นหาและติดตามประวัติแบบรวมศูนย์" action="＋ เพิ่มลูกค้า" onAction={onAdd} headers={["รหัส","ลูกค้า","เบอร์โทร","บริการล่าสุด","เข้ารับบริการ","ติดตามครั้งถัดไป","สถานะ"]} rows={mockCustomers.map(c=>[c.id,c.name,c.phone,c.service,c.last,c.follow,c.status])}/>;
-  if(active === "ติดตามลูกค้า") return <FollowUpModule/>;
-  if(active === "นัดหมาย") return <DataModule title="ตารางนัดหมาย" subtitle="นัดหมายจำลองวันนี้และ 7 วันข้างหน้า" headers={["เวลา/วันที่","ลูกค้า","บริการ","ผู้ดูแล","สถานะ"]} rows={mockCustomers.slice(4,12).map((c,i)=>[["วันนี้ 10:00","วันนี้ 11:30","วันนี้ 14:00","วันนี้ 16:30","18 ก.ค. 11:00","20 ก.ค. 13:30","22 ก.ค. 15:00","24 ก.ค. 17:00"][i],c.name,c.service,["คุณนุ่น","คุณฝน","พญ. รวี"][i%3],c.status])}/>;
+function ModuleContent({active,onAdd,customers,employees}:{active:string;onAdd:()=>void;customers:Customer[];employees:Employee[]}) {
+  if(active === "ลูกค้า") return <DataModule title="ฐานข้อมูลลูกค้า" subtitle={`ข้อมูล ${customers.length} รายจากฐานข้อมูลที่เชื่อมต่อ`} action="＋ เพิ่มลูกค้า" onAction={onAdd} headers={["รหัส","ลูกค้า","เบอร์โทร","บริการล่าสุด","เข้ารับบริการ","ติดตามครั้งถัดไป","สถานะ"]} rows={customers.map(c=>[c.id,c.name,c.phone,c.service,c.last,c.follow,c.status])}/>;
+  if(active === "ติดตามลูกค้า") return <FollowUpModule customers={customers}/>;
+  if(active === "นัดหมาย") return <DataModule title="ตารางนัดหมาย" subtitle="นัดหมายวันนี้และ 7 วันข้างหน้า" headers={["เวลา/วันที่","ลูกค้า","บริการ","ผู้ดูแล","สถานะ"]} rows={customers.slice(4,12).map((c,i)=>[["วันนี้ 10:00","วันนี้ 11:30","วันนี้ 14:00","วันนี้ 16:30","18 ก.ค. 11:00","20 ก.ค. 13:30","22 ก.ค. 15:00","24 ก.ค. 17:00"][i],c.name,c.service,["คุณนุ่น","คุณฝน","พญ. รวี"][i%3],c.status])}/>;
   if(active === "การเงิน") return <DataModule title="รายรับและธุรกรรม" subtitle="ยอดจำลองวันนี้ 37,100 บาท · ยังไม่ใช่ข้อมูลบัญชีจริง" headers={["เลขที่","ลูกค้า","รายการ","ยอด (บาท)","สถานะ"]} rows={mockTransactions}/>;
-  if(active === "พนักงาน") return <DataModule title="พนักงานและเวลาเข้างาน" subtitle="พนักงานจำลอง 7 คน ครบตำแหน่งหลักของคลินิก" headers={["รหัส","ชื่อ","ตำแหน่ง","กะงาน","เวลาเข้า","สถานะ"]} rows={mockEmployees.map(e=>[e.id,e.name,e.position,e.shift,e.attendance,e.status])}/>;
+  if(active === "พนักงาน") return <DataModule title="พนักงานและเวลาเข้างาน" subtitle={`พนักงาน ${employees.length} คนจากฐานข้อมูลที่เชื่อมต่อ`} headers={["รหัส","ชื่อ","ตำแหน่ง","กะงาน","เวลาเข้า","สถานะ"]} rows={employees.map(e=>[e.id,e.name,e.position,e.shift,e.attendance,e.status])}/>;
   if(active === "SOP & Checklist") return <DataModule title="SOP & Checklist" subtitle="ขั้นตอนหลักพร้อมเปิดใช้งานและแก้ไขเพิ่มภายหลัง" headers={["หมวด","รายการตรวจ","ผู้รับผิดชอบ","รอบ","สถานะ"]} rows={[["เปิดคลินิก","ตรวจความสะอาดและอุปกรณ์","แม่บ้าน / Stock","ทุกวัน","พร้อมใช้"],["บริการลูกค้า","ยืนยันประวัติแพ้ยาและ Consent","พยาบาล","ทุกเคส","บังคับ"],["หัตถการ","ถ่ายภาพก่อน–หลังและลง Lot ยา","ผู้ช่วยแพทย์","ทุกเคส","บังคับ"],["Follow-up","ติดต่อหลังบริการตามกำหนด","ที่ปรึกษา","ทุกวัน","พร้อมใช้"],["ปิดคลินิก","สรุปเงินสดและตรวจ Stock","ผู้จัดการ","ทุกวัน","พร้อมใช้"],["ฉุกเฉิน","ตรวจชุดยาและเบอร์ติดต่อฉุกเฉิน","พยาบาล","ทุกสัปดาห์","พร้อมใช้"]]}/>;
   if(active === "Stock") return <DataModule title="Stock คลินิก" subtitle="วัสดุและเวชภัณฑ์จำลอง · แจ้งเตือนเมื่อถึงจุดสั่งซื้อ" headers={["รหัส","รายการ","คงเหลือ","ขั้นต่ำ","สถานะ"]} rows={mockStock}/>;
   return <DataModule title={active} subtitle="โมดูลพร้อมใช้งาน" headers={["สถานะ"]} rows={[["พร้อมใช้งาน"]]}/>;
 }
 
-function FollowUpModule() {
+function FollowUpModule({customers:sourceCustomers}:{customers:Customer[]}) {
   const [search,setSearch]=useState("");
   const [statusFilter,setStatusFilter]=useState("ทั้งหมด");
   const [ownerFilter,setOwnerFilter]=useState("ทั้งหมด");
   const [serviceFilter,setServiceFilter]=useState("ทั้งหมด");
   const [sortBy,setSortBy]=useState("priority");
   const owners=["แป้ง","นุ่น","ฝน","มายด์"];
-  const customers=useMemo(()=>mockCustomers.map((customer,index)=>({...customer,owner:owners[index%owners.length]})),[]);
+  const customers=useMemo(()=>sourceCustomers.map((customer,index)=>({...customer,owner:owners[index%owners.length]})),[sourceCustomers]);
   const statuses=useMemo(()=>Array.from(new Set(customers.map(c=>c.status))),[customers]);
   const services=useMemo(()=>Array.from(new Set(customers.map(c=>c.service))).sort((a,b)=>a.localeCompare(b,"th")),[customers]);
   const statusCounts=useMemo(()=>statuses.reduce<Record<string,number>>((result,status)=>{result[status]=customers.filter(c=>c.status===status).length;return result;},{}),[customers,statuses]);
@@ -327,7 +382,7 @@ function SettingsPage({onSaved}:{onSaved:()=>void}) {
   </div>;
 }
 
-function AddCustomer({onClose}:{onClose:()=>void}) {
+function AddCustomer({onClose,onSaved}:{onClose:()=>void;onSaved:()=>Promise<void>}) {
   const [saved,setSaved]=useState(false);
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState("");
@@ -338,11 +393,14 @@ function AddCustomer({onClose}:{onClose:()=>void}) {
     const url=localStorage.getItem(CONNECTION_URL_KEY)||"";
     const apiKey=localStorage.getItem(CONNECTION_API_KEY)||"";
     if(!url||!apiKey){setSaving(false);setError("กรุณาเชื่อม Google Sheet ในเมนูตั้งค่าก่อน");return;}
-    const data={full_name:form.get("full_name"),nickname:form.get("nickname"),phone:form.get("phone"),source:"Web App",consent_contact:form.get("consent_contact")==="on",medical_note:form.get("medical_note")};
+    const data={full_name:form.get("full_name"),nickname:form.get("nickname"),phone:form.get("phone"),service_interest:form.get("service_interest"),source:"Web App",consent_contact:form.get("consent_contact")==="on",medical_note:form.get("medical_note")};
     try{
-      await fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"addCustomer",apiKey,data})});
+      const response=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"addCustomer",apiKey,data})});
+      const result=await response.json();
+      if(!result.ok) throw new Error(result.error||"SAVE_FAILED");
       setSaved(true);
-    }catch{setError("ส่งข้อมูลไม่สำเร็จ กรุณาตรวจ URL และลองใหม่");}
+      await onSaved();
+    }catch(error){setError(error instanceof Error&&error.message==="DUPLICATE_PHONE"?"มีเบอร์โทรนี้อยู่ในระบบแล้ว":"ส่งข้อมูลไม่สำเร็จ กรุณาตรวจ URL และลองใหม่");}
     finally{setSaving(false);}
   }
   return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><div className="modal"><button className="modal-close" onClick={onClose}>×</button>{saved ? <div className="success"><div>✓</div><h2>ส่งข้อมูลลูกค้าแล้ว</h2><p>ระบบส่งข้อมูลไปยัง Google Sheet เรียบร้อย</p><button className="primary" onClick={onClose}>กลับหน้าหลัก</button></div> : <><span className="eyebrow">NEW CUSTOMER</span><h2>เพิ่มลูกค้าใหม่</h2><p>{connected?"ข้อมูลจะถูกบันทึกใน Google Sheet ของคลินิก":"ยังไม่เชื่อม Google Sheet — ตั้งค่าได้ที่เมนูตั้งค่า"}</p><form onSubmit={submit}><label>ชื่อ–นามสกุล<input name="full_name" required placeholder="เช่น สมหญิง ใจดี"/></label><div className="form-grid"><label>ชื่อเล่น<input name="nickname" placeholder="ชื่อเล่น"/></label><label>เบอร์โทร<input name="phone" required inputMode="tel" placeholder="08x-xxx-xxxx"/></label></div><label>บริการที่สนใจ<select name="service_interest" defaultValue=""><option value="" disabled>เลือกบริการ</option><option>Botox</option><option>Filler</option><option>เส้นเลือดขอด</option><option>ทรีตเมนต์ผิว</option></select></label><label>หมายเหตุ<textarea name="medical_note" placeholder="ข้อมูลที่ควรทราบ..."/></label><label className="consent"><input name="consent_contact" type="checkbox"/> ลูกค้ายินยอมให้ติดต่อเพื่อนัดหมายและติดตามผล</label>{error&&<p className="form-error">{error}</p>}<button className="primary form-submit" disabled={saving}>{saving?"กำลังบันทึก...":"บันทึกลูกค้า"}</button></form></>}</div></div>;

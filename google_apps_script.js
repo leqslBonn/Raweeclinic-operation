@@ -15,9 +15,14 @@ function doPost(e) {
     const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     if (body.apiKey !== API_KEY) return json_({ ok: false, error: 'Unauthorized' });
     switch (body.action) {
+      case 'getSystemData': return getSystemData_();
       case 'addCustomer': return addCustomer_(body.data || {});
+      case 'updateCustomer': return updateRecord_('Customers', 'customer_id', body.data || {});
       case 'addAppointment': return appendRecord_('Appointments', body.data || {}, 'APT');
       case 'addFollowUp': return appendRecord_('FollowUps', body.data || {}, 'FUP');
+      case 'addEmployee': return upsertRecord_('Employees', 'employee_id', body.data || {}, 'EMP');
+      case 'addTransaction': return appendRecord_('Transactions', body.data || {}, 'TXN');
+      case 'bulkUpsertEmployees': return bulkUpsertEmployees_(body.data || []);
       case 'clockIn': return appendRecord_('Attendance', body.data || {}, 'ATT');
       default: return json_({ ok: false, error: 'Unsupported action' });
     }
@@ -49,10 +54,81 @@ function addCustomer_(data) {
 
 function appendRecord_(sheetName, data, prefix) {
   const sheet = sheet_(sheetName);
-  const idKey = { Appointments: 'appointment_id', FollowUps: 'followup_id', Attendance: 'attendance_id' }[sheetName];
+  const idKey = { Appointments: 'appointment_id', FollowUps: 'followup_id', Transactions: 'transaction_id', Attendance: 'attendance_id' }[sheetName];
   if (idKey && !data[idKey]) data[idKey] = makeId_(prefix);
   appendByHeaders_(sheet, data);
   return json_({ ok: true, id: idKey ? data[idKey] : null });
+}
+
+function getSystemData_() {
+  return json_({
+    ok: true,
+    customers: records_('Customers'),
+    employees: records_('Employees'),
+    appointments: records_('Appointments'),
+    followups: records_('FollowUps'),
+    transactions: records_('Transactions'),
+    attendance: records_('Attendance'),
+    timestamp: new Date().toISOString()
+  });
+}
+
+function records_(sheetName) {
+  const values = sheet_(sheetName).getDataRange().getValues();
+  if (values.length < 2) return [];
+  const headers = values[0].map(String);
+  return values.slice(1).filter(row => row.some(value => value !== '')).map(row => {
+    const record = {};
+    headers.forEach((header, index) => {
+      const value = row[index];
+      record[header] = value instanceof Date ? value.toISOString() : value;
+    });
+    return record;
+  });
+}
+
+function updateRecord_(sheetName, idKey, data) {
+  if (!data[idKey]) return json_({ ok: false, error: 'Missing ' + idKey });
+  const sheet = sheet_(sheetName);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(String);
+  const idIndex = headers.indexOf(idKey);
+  if (idIndex < 0) return json_({ ok: false, error: 'Missing header ' + idKey });
+  const rowIndex = values.slice(1).findIndex(row => String(row[idIndex]) === String(data[idKey]));
+  if (rowIndex < 0) return json_({ ok: false, error: 'Record not found' });
+  const targetRow = rowIndex + 2;
+  headers.forEach((header, columnIndex) => {
+    if (Object.prototype.hasOwnProperty.call(data, header)) sheet.getRange(targetRow, columnIndex + 1).setValue(data[header]);
+  });
+  return json_({ ok: true, id: data[idKey] });
+}
+
+function upsertRecord_(sheetName, idKey, data, prefix) {
+  const sheet = sheet_(sheetName);
+  if (!data[idKey]) data[idKey] = makeId_(prefix);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(String);
+  const idIndex = headers.indexOf(idKey);
+  const exists = idIndex >= 0 && values.slice(1).some(row => String(row[idIndex]) === String(data[idKey]));
+  if (exists) return updateRecord_(sheetName, idKey, data);
+  appendByHeaders_(sheet, data);
+  return json_({ ok: true, id: data[idKey] });
+}
+
+function bulkUpsertEmployees_(employees) {
+  if (!Array.isArray(employees)) return json_({ ok: false, error: 'Employees must be an array' });
+  employees.forEach(employee => {
+    const sheet = sheet_('Employees');
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0].map(String);
+    const idIndex = headers.indexOf('employee_id');
+    const rowIndex = idIndex < 0 ? -1 : values.slice(1).findIndex(row => String(row[idIndex]) === String(employee.employee_id));
+    if (rowIndex < 0) appendByHeaders_(sheet, employee);
+    else headers.forEach((header, columnIndex) => {
+      if (Object.prototype.hasOwnProperty.call(employee, header)) sheet.getRange(rowIndex + 2, columnIndex + 1).setValue(employee[header]);
+    });
+  });
+  return json_({ ok: true, count: employees.length });
 }
 
 function appendByHeaders_(sheet, data) {
