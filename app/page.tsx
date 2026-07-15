@@ -3,8 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 
 const LOGIN_SESSION_KEY = "raweeClinicAuthenticated";
+type UserRole = "owner" | "staff";
+
 const LOGIN_USER_HASH = "5e00556ac64a0763e7921cbf4841e8fc032c51a839faa53e1acecfa00f29f0d5";
 const LOGIN_PASSWORD_HASH = "48c90c24f9e5851f352d830ebe544d81569c4fc930b84f059ef13bfc889d611f";
+const STAFF_USER_HASH = "681927e34b77e4b91b1f6f305d9ede004ad0b02f7c81ff74d8f7015e1b8f9c4e";
+const STAFF_PASSWORD_HASH = "0a6dcd204823635cbb89bf8fd12e73417b0f84ce355b44dd4efaed89b4e45fa1";
 
 const navItems = [
   ["ภาพรวม", "⌂"], ["ลูกค้า", "♙"], ["ติดตามลูกค้า", "◎"], ["นัดหมาย", "□"],
@@ -26,7 +30,7 @@ const appointments = [
 ];
 
 export default function Home() {
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [role, setRole] = useState<UserRole | null | undefined>(undefined);
   const [active, setActive] = useState("ภาพรวม");
   const [showAdd, setShowAdd] = useState(false);
   const [done, setDone] = useState<string[]>([]);
@@ -34,11 +38,14 @@ export default function Home() {
   const today = useMemo(() => new Intl.DateTimeFormat("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date()), []);
 
   useEffect(() => {
-    setAuthenticated(sessionStorage.getItem(LOGIN_SESSION_KEY) === "yes");
+    const savedRole = sessionStorage.getItem(LOGIN_SESSION_KEY);
+    setRole(savedRole === "owner" || savedRole === "staff" ? savedRole : null);
   }, []);
 
-  if (authenticated === null) return <div className="login-loading">กำลังเปิดระบบ...</div>;
-  if (!authenticated) return <LoginPage onLogin={() => setAuthenticated(true)} />;
+  if (role === undefined) return <div className="login-loading">กำลังเปิดระบบ...</div>;
+  if (role === null) return <LoginPage onLogin={setRole} />;
+
+  const visibleNavItems = role === "owner" ? navItems : navItems.filter(([label]) => label !== "ตั้งค่า");
 
   return (
     <main className="app-shell">
@@ -49,7 +56,7 @@ export default function Home() {
         </div>
         <nav>
           <p className="nav-label">เมนูหลัก</p>
-          {navItems.map(([label, icon]) => (
+          {visibleNavItems.map(([label, icon]) => (
             <button key={label} className={active === label ? "active" : ""} onClick={() => setActive(label)}>
               <span className="nav-icon">{icon}</span>{label}
               {label === "ติดตามลูกค้า" && <b className="badge">4</b>}
@@ -57,7 +64,7 @@ export default function Home() {
           ))}
         </nav>
         <div className="clinic-card"><span className="pulse"/><div><b>Rawee Clinic</b><small>ระบบพร้อมใช้งาน</small></div></div>
-        <div className="user"><div className="avatar">ร</div><div><b>คุณรวี</b><small>เจ้าของคลินิก</small></div><button className="logout-btn" onClick={() => { sessionStorage.removeItem(LOGIN_SESSION_KEY); setAuthenticated(false); }}>ออก</button></div>
+        <div className="user"><div className="avatar">{role === "owner" ? "ร" : "S"}</div><div><b>{role === "owner" ? "คุณรวี" : "Staff"}</b><small>{role === "owner" ? "เจ้าของคลินิก" : "พนักงาน"}</small></div><button className="logout-btn" onClick={() => { sessionStorage.removeItem(LOGIN_SESSION_KEY); setRole(null); }}>ออก</button></div>
       </aside>
 
       <section className="workspace">
@@ -66,7 +73,7 @@ export default function Home() {
           <div className="header-actions"><button className="icon-btn" aria-label="แจ้งเตือน">♢<i>3</i></button><button className="primary" onClick={() => setShowAdd(true)}>＋ เพิ่มลูกค้าใหม่</button></div>
         </header>
 
-        {active === "ภาพรวม" ? <Dashboard done={done} setDone={setDone} /> : active === "ตั้งค่า" ? <SettingsPage key={connectionVersion} onSaved={() => setConnectionVersion(v => v + 1)} /> : <ModulePlaceholder active={active} onAdd={() => setShowAdd(true)} />}
+        {active === "ภาพรวม" ? <Dashboard done={done} setDone={setDone} /> : active === "ตั้งค่า" && role === "owner" ? <SettingsPage key={connectionVersion} onSaved={() => setConnectionVersion(v => v + 1)} /> : <ModulePlaceholder active={active} onAdd={() => setShowAdd(true)} />}
       </section>
 
       {showAdd && <AddCustomer onClose={() => setShowAdd(false)} />}
@@ -80,7 +87,7 @@ async function sha256(value: string) {
   return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function LoginPage({ onLogin }: { onLogin: () => void }) {
+function LoginPage({ onLogin }: { onLogin: (role: UserRole) => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -91,9 +98,12 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
     setChecking(true);
     setError("");
     const [userHash, passwordHash] = await Promise.all([sha256(username.trim()), sha256(password)]);
-    if (userHash === LOGIN_USER_HASH && passwordHash === LOGIN_PASSWORD_HASH) {
-      sessionStorage.setItem(LOGIN_SESSION_KEY, "yes");
-      onLogin();
+    let matchedRole: UserRole | null = null;
+    if (userHash === LOGIN_USER_HASH && passwordHash === LOGIN_PASSWORD_HASH) matchedRole = "owner";
+    if (userHash === STAFF_USER_HASH && passwordHash === STAFF_PASSWORD_HASH) matchedRole = "staff";
+    if (matchedRole) {
+      sessionStorage.setItem(LOGIN_SESSION_KEY, matchedRole);
+      onLogin(matchedRole);
     } else {
       setError("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
     }
