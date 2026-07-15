@@ -218,7 +218,7 @@ export default function Home() {
 
       {showAdd && <AddCustomer onClose={() => setShowAdd(false)} onSaved={loadSheetData} />}
       {showActions&&<ActionCenter role={role} onClose={()=>setShowActions(false)} onChoose={kind=>{setShowActions(false);if(kind==="customer")setShowAdd(true);else setShowForm(kind);}}/>}
-      {showForm&&<OperationalForm kind={showForm} role={role} customers={customers} employees={employees} systemData={systemData} onClose={()=>setShowForm(null)} onSave={saveOperationalRecord}/>} 
+      {showForm&&<OperationalForm kind={showForm} role={role} customers={customers} employees={employees} systemData={systemData} onClose={()=>setShowForm(null)} onSave={saveOperationalRecord}/>}
     </main>
   );
 }
