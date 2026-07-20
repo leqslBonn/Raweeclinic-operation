@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 "use client";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-const APP_VERSION = "1.2.1";
+const APP_VERSION = "1.3.0";
 const RAW_DATA_SHEET_URL = "https://docs.google.com/spreadsheets/d/1wA-u9CkCVDQ88LIl1P9cNMFaNBF6c6A2DuQsYV9adR8/edit";
 const LOCAL_PREVIEW = import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "owner";
 type UserRole = "owner" | "staff";
@@ -129,7 +129,7 @@ export default function Home() {
     const visibleNav = navItems.filter(([label]) => (role === "owner" || label !== "ตั้งค่า") && (label === "ภาพรวม" || label === "ตั้งค่า" || !disabledModules.has(label)));
     const openCount = customers.filter(item => ["ด่วน", "เกินกำหนด", "รอติดตาม"].includes(item.status)).length;
     return <main className="app-shell"><aside className="sidebar"><div className="brand"><div className="brand-mark">R<span>✦</span></div><div><strong>RAWEE</strong><small>AESTHETIC CLINIC</small></div></div><nav><p className="nav-label">เมนูหลัก</p>{visibleNav.map(([label, icon]) => <button key={label} className={active === label ? "active" : ""} onClick={() => setActive(label)}><span className="nav-icon">{icon}</span>{label}{label === "ติดตามลูกค้า" && openCount > 0 && <b className="badge">{openCount}</b>}</button>)}</nav><div className="clinic-card"><span className="pulse"/><div><b>Rawee Clinic</b><small>{dataStatus === "sheet" ? `เชื่อม Google Sheet · v${APP_VERSION}` : `ตรวจการเชื่อมต่อ · v${APP_VERSION}`}</small></div></div><div className="user"><div className="avatar">{role === "owner" ? "ร" : "S"}</div><div><b>{role === "owner" ? "คุณรวี" : "Staff"}</b><small>{role === "owner" ? "เจ้าของคลินิก" : "พนักงาน"}</small></div><button className="logout-btn" onClick={() => void logout()}>ออก</button></div></aside>
-  <section className="workspace"><header><div><h1>{active}</h1><p>{today} · สาขาคลองสาม</p></div><div className="header-actions"><span className={`data-source ${dataStatus}`}>{dataStatus === "sheet" ? "● Google Sheet" : dataStatus === "loading" ? "กำลังโหลด..." : "○ เชื่อมต่อไม่สำเร็จ"}</span><button className="icon-btn" aria-label="โหลดข้อมูลใหม่" onClick={() => void loadSheetData()}>↻</button><button className="primary" onClick={() => setShowActions(true)}>＋ บันทึกข้อมูล</button></div></header>{dataStatus === "error" && <div className="system-alert">โหลดข้อมูลไม่สำเร็จ: {loadError} <button onClick={() => void loadSheetData()}>ลองอีกครั้ง</button></div>}{active === "ภาพรวม" ? <Dashboard onOpenModule={setActive} customers={customers} employees={employees} systemData={systemData}/> : active === "ตั้งค่า" && role === "owner" ? <SettingsPage settings={systemData.settings} onToggle={updateModuleEnabled}/> : <ModuleContent active={active} role={role} onAdd={() => setShowAdd(true)} customers={customers} employees={employees} systemData={systemData} onOpenForm={setShowForm} onUpdateStatus={updateCustomerStatus}/>}</section>
+  <section className="workspace"><header><div><h1>{active}</h1><p>{today} · สาขาคลองสาม</p></div><div className="header-actions"><span className={`data-source ${dataStatus}`}>{dataStatus === "sheet" ? "● Google Sheet" : dataStatus === "loading" ? "กำลังโหลด..." : "○ เชื่อมต่อไม่สำเร็จ"}</span><button className="icon-btn" aria-label="โหลดข้อมูลใหม่" onClick={() => void loadSheetData()}>↻</button><button className="primary" onClick={() => setShowActions(true)}>＋ บันทึกข้อมูล</button></div></header>{dataStatus === "error" && <div className="system-alert">โหลดข้อมูลไม่สำเร็จ: {loadError} <button onClick={() => void loadSheetData()}>ลองอีกครั้ง</button></div>}{active === "ภาพรวม" ? <Dashboard onOpenModule={setActive} customers={customers} employees={employees} systemData={systemData}/> : active === "ตั้งค่า" && role === "owner" ? <SettingsPage settings={systemData.settings} onToggle={updateModuleEnabled}/> : <ModuleContent active={active} role={role} onAdd={() => setShowAdd(true)} customers={customers} employees={employees} systemData={systemData} onOpenForm={setShowForm} onUpdateStatus={updateCustomerStatus} onSave={saveOperationalRecord}/>}</section>
   {showAdd && <AddCustomer services={systemData.services} onClose={() => setShowAdd(false)} onSaved={loadSheetData}/>} {showActions && <ActionCenter role={role} onClose={() => setShowActions(false)} onChoose={kind => { setShowActions(false); if (kind === "customer") setShowAdd(true); else setShowForm(kind); }}/>}{showForm && <OperationalForm kind={showForm} role={role} customers={customers} employees={employees} systemData={systemData} onClose={() => setShowForm(null)} onSave={saveOperationalRecord}/>}</main>;
 }
 function LoginPage({ onLogin }: {
@@ -164,7 +164,7 @@ function Metric({ icon, label, value, unit, note, tone }: {
 function EmptyState({ label }: {
     label: string;
 }) { return <div className="empty-result">{label}</div>; }
-function ModuleContent({ active, role, onAdd, customers, employees, systemData, onOpenForm, onUpdateStatus }: {
+function ModuleContent({ active, role, onAdd, customers, employees, systemData, onOpenForm, onUpdateStatus, onSave }: {
     active: string;
     role: UserRole;
     onAdd: () => void;
@@ -173,6 +173,7 @@ function ModuleContent({ active, role, onAdd, customers, employees, systemData, 
     systemData: SystemData;
     onOpenForm: (kind: FormKind) => void;
     onUpdateStatus: (customerId: string, status: string, detail?: RawRecord) => Promise<void>;
+    onSave: (action: string, data: RawRecord) => Promise<void>;
 }) {
     const customerName = (id: unknown) => text(customers.find(c => c.id === String(id))?.name || id);
     const serviceName = (id: unknown) => text(systemData.services.find(s => String(s.service_id) === String(id))?.service_name || id);
@@ -204,8 +205,43 @@ function ModuleContent({ active, role, onAdd, customers, employees, systemData, 
     if (active === "SOP & Checklist")
         return <DataModule title="SOP & Checklist" subtitle="ขั้นตอนปฏิบัติงานที่ใช้งานจริง" action={role === "owner" ? "＋ เพิ่ม SOP" : undefined} onAction={role === "owner" ? () => onOpenForm("sop") : undefined} headers={["หมวด", "ชื่อ SOP", "ลำดับ", "ขั้นตอน", "ผู้รับผิดชอบ", "ระดับ"]} rows={systemData.sop.map(row => [text(row.category), text(row.sop_name), text(row.step_no), text(row.step_detail), text(row.owner_role), row.required === true || String(row.required).toUpperCase() === "TRUE" ? "บังคับ" : "แนะนำ"])}/>;
     if (active === "Stock")
-        return <DataModule title="Stock คลินิก" subtitle="ยอดคงเหลือจริงและจุดสั่งซื้อ" action={role === "owner" ? "＋ เพิ่มสินค้า" : "＋ เบิก/รับ Stock"} onAction={() => onOpenForm(role === "owner" ? "inventoryItem" : "stockMovement")} headers={["รหัส", "รายการ", "หมวด", "คงเหลือ", "หน่วย", "ขั้นต่ำ", "สถานะ"]} rows={systemData.inventory.map(row => { const on = Number(row.on_hand || 0), min = Number(row.reorder_level || 0); return [text(row.item_id), text(row.item_name), text(row.category), text(on), text(row.unit), text(min), on <= min ? "ต้องสั่ง" : "ปกติ"]; })}/>;
+        return <InventoryModule role={role} inventory={systemData.inventory} onOpenForm={onOpenForm} onSave={onSave}/>;
     return null;
+}
+function InventoryModule({ role, inventory, onOpenForm, onSave }: {
+    role: UserRole;
+    inventory: RawRecord[];
+    onOpenForm: (kind: FormKind) => void;
+    onSave: (action: string, data: RawRecord) => Promise<void>;
+}) {
+    const [adding, setAdding] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState("");
+    async function addItem(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        setSaving(true);
+        setError("");
+        const form = new FormData(event.currentTarget);
+        try {
+            await onSave("addInventoryItem", {
+                item_name: form.get("item_name"), category: form.get("category"), unit: form.get("unit"),
+                on_hand: Number(form.get("on_hand") || 0), reorder_level: Number(form.get("reorder_level") || 0),
+                cost_per_unit: Number(form.get("cost_per_unit") || 0), selling_price: Number(form.get("selling_price") || 0),
+                lot_no: form.get("lot_no"), expiry_date: form.get("expiry_date"), note: form.get("note"),
+                active: true, created_at: new Date().toISOString()
+            });
+            setAdding(false);
+        }
+        catch (error) {
+            setError(error instanceof Error ? error.message : "เพิ่มสินค้าไม่สำเร็จ");
+        }
+        finally {
+            setSaving(false);
+        }
+    }
+    const headers = ["รหัส", "รายการ", "หมวด", "คงเหลือ", "หน่วย", "ขั้นต่ำ", "ราคาทุน", "ราคาขาย", "สถานะ", ...(role === "owner" ? ["จัดการ"] : [])];
+    const rows = inventory.map(row => { const on = Number(row.on_hand || 0), min = Number(row.reorder_level || 0); const cells: TableCell[] = [text(row.item_id), text(row.item_name), text(row.category), text(on), text(row.unit), text(min), `฿ ${money(row.cost_per_unit)}`, `฿ ${money(row.selling_price)}`, on <= min ? "ต้องสั่ง" : "ปกติ"]; if (role === "owner") cells.push(<InventoryItemAction item={row} onSave={onSave}/>); return cells; });
+    return <><DataModule title="สินค้าและ Stock คลินิก" subtitle="Owner เพิ่ม แก้ราคา หรือลบรายการได้โดยไม่ต้องแก้โค้ด" action={role === "owner" ? "＋ เพิ่มสินค้า" : "＋ เบิก/รับ Stock"} onAction={() => role === "owner" ? setAdding(true) : onOpenForm("stockMovement")} headers={headers} rows={rows}/>{adding && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setAdding(false); }}><div className="modal operational-modal"><button className="modal-close" onClick={() => setAdding(false)}>×</button><span className="eyebrow">PRODUCT MASTER</span><h2>เพิ่มสินค้าและกำหนดราคา</h2><p>รายการใหม่จะบันทึกลง Google Sheet และพร้อมใช้ใน Stock ทันที</p><form onSubmit={addItem}><div className="entry-grid"><label>ชื่อสินค้า/เวชภัณฑ์<input name="item_name" required/></label><label>หมวด<input name="category" required placeholder="เช่น เวชภัณฑ์, Skincare"/></label><label>หน่วย<input name="unit" required placeholder="ชิ้น, กล่อง, ขวด"/></label><label>ยอดเริ่มต้น<input name="on_hand" type="number" min="0" step="any" defaultValue="0" required/></label><label>จุดสั่งซื้อ<input name="reorder_level" type="number" min="0" step="any" defaultValue="0" required/></label><label>ราคาทุนต่อหน่วย<input name="cost_per_unit" type="number" min="0" step="any" defaultValue="0"/></label><label>ราคาขายต่อหน่วย<input name="selling_price" type="number" min="0" step="any" required/></label><label>Lot<input name="lot_no"/></label><label>วันหมดอายุ<input name="expiry_date" type="date"/></label><label className="wide-field">หมายเหตุ<textarea name="note"/></label></div>{error && <p className="form-error">{error}</p>}<button className="primary form-submit" disabled={saving}>{saving ? "กำลังบันทึก..." : "เพิ่มสินค้า"}</button></form></div></div>}</>;
 }
 function CatalogModule({ role, services, packages, onOpenForm }: {
     role: UserRole;
@@ -253,6 +289,57 @@ function CustomerEditAction({customer,services}:{customer:Customer;services:RawR
     return <><button className="row-action" onClick={()=>setOpen(true)}>แก้ไข</button>{open&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setOpen(false)}}><div className="modal"><button className="modal-close" onClick={()=>setOpen(false)}>×</button><span className="eyebrow">CUSTOMER PROFILE</span><h2>แก้ไขข้อมูลลูกค้า</h2><form onSubmit={submit}><label>ชื่อ–นามสกุล<input name="full_name" defaultValue={customer.name} required/></label><label>เบอร์โทร<input name="phone" defaultValue={customer.phone} required inputMode="tel" pattern="0[0-9 -]{8,14}"/></label><label>บริการที่สนใจ<select name="service_interest" defaultValue={customer.service}><option value="">ยังไม่ระบุ</option>{services.map(service=><option key={text(service.service_id)} value={text(service.service_name)}>{text(service.service_name)}</option>)}</select></label>{error&&<p className="form-error">{error}</p>}<button className="primary form-submit" disabled={saving}>{saving?"กำลังบันทึก...":"บันทึกการแก้ไข"}</button></form></div></div>}</>;
 }
 
+function InventoryItemAction({ item, onSave }: {
+    item: RawRecord;
+    onSave: (action: string, data: RawRecord) => Promise<void>;
+}) {
+    const [open, setOpen] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState("");
+    async function submit(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        setSaving(true);
+        setError("");
+        const form = new FormData(event.currentTarget);
+        try {
+            await onSave("addInventoryItem", {
+                item_id: item.item_id,
+                item_name: form.get("item_name"),
+                category: form.get("category"),
+                unit: form.get("unit"),
+                reorder_level: Number(form.get("reorder_level") || 0),
+                cost_per_unit: Number(form.get("cost_per_unit") || 0),
+                selling_price: Number(form.get("selling_price") || 0),
+                lot_no: form.get("lot_no"),
+                expiry_date: form.get("expiry_date"),
+                note: form.get("note"),
+                active: true,
+                updated_at: new Date().toISOString()
+            });
+            setOpen(false);
+        }
+        catch (error) {
+            setError(error instanceof Error ? error.message : "แก้ไขสินค้าไม่สำเร็จ");
+        }
+        finally {
+            setSaving(false);
+        }
+    }
+    async function remove() {
+        if (!window.confirm(`ลบ ${text(item.item_name)} ออกจากรายการใช้งาน? ประวัติ Stock เดิมจะยังคงอยู่`))
+            return;
+        setSaving(true);
+        try {
+            await onSave("setEntityActive", { entity: "inventory", id: item.item_id, active: false });
+        }
+        catch (error) {
+            window.alert(error instanceof Error ? error.message : "ลบสินค้าไม่สำเร็จ");
+            setSaving(false);
+        }
+    }
+    return <><div className="row-actions"><button className="row-action" disabled={saving} onClick={() => setOpen(true)}>แก้ไข/ราคา</button><button className="row-action danger-action" disabled={saving} onClick={() => void remove()}>ลบ</button></div>{open && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setOpen(false); }}><div className="modal operational-modal"><button className="modal-close" onClick={() => setOpen(false)}>×</button><span className="eyebrow">PRODUCT MASTER</span><h2>แก้ไขสินค้าและราคา</h2><p>ยอดคงเหลือให้ปรับผ่านรายการรับเข้า/เบิกใช้ เพื่อเก็บประวัติครบถ้วน</p><form onSubmit={submit}><div className="entry-grid"><label>ชื่อสินค้า/เวชภัณฑ์<input name="item_name" defaultValue={text(item.item_name, "")} required/></label><label>หมวด<input name="category" defaultValue={text(item.category, "")} required/></label><label>หน่วย<input name="unit" defaultValue={text(item.unit, "")} required/></label><label>จุดสั่งซื้อ<input name="reorder_level" type="number" min="0" step="any" defaultValue={String(item.reorder_level || 0)} required/></label><label>ราคาทุนต่อหน่วย<input name="cost_per_unit" type="number" min="0" step="any" defaultValue={String(item.cost_per_unit || 0)}/></label><label>ราคาขายต่อหน่วย<input name="selling_price" type="number" min="0" step="any" defaultValue={String(item.selling_price || 0)} required/></label><label>Lot<input name="lot_no" defaultValue={text(item.lot_no, "")}/></label><label>วันหมดอายุ<input name="expiry_date" type="date" defaultValue={isoDay(item.expiry_date)}/></label><label className="wide-field">หมายเหตุ<textarea name="note" defaultValue={text(item.note, "")}/></label></div>{error && <p className="form-error">{error}</p>}<button className="primary form-submit" disabled={saving}>{saving ? "กำลังบันทึก..." : "บันทึกสินค้าและราคา"}</button></form></div></div>}</>;
+}
+
 function OwnerRecordAction({ action, id, label, status, confirmText }: {
     action: string;
     id: string;
@@ -288,7 +375,7 @@ function ActionCenter({ role, onClose, onChoose }: {
     role: UserRole;
     onClose: () => void;
     onChoose: (kind: FormKind) => void;
-}) { const staff: FormKind[] = ["customer", "appointment", "visit", "transaction", "courseSale", "courseUse", "expense", "stockMovement", "attendance"]; const owner: FormKind[] = [...staff, "service", "package", "inventoryItem", "employee", "sop"]; return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget)
+}) { const staff: FormKind[] = ["customer", "appointment", "visit", "transaction", "courseSale", "courseUse", "expense", "stockMovement", "attendance"]; const owner: FormKind[] = [...staff, "service", "package", "employee", "sop"]; return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget)
     onClose(); }}><div className="modal action-center"><button className="modal-close" onClick={onClose}>×</button><span className="eyebrow">STAFF DATA ENTRY</span><h2>บันทึกข้อมูลเข้าระบบ</h2><p>ข้อมูลจะบันทึกลง Google Sheet โดยตรง</p><div className="action-grid">{(role === "owner" ? owner : staff).map(kind => <button key={kind} onClick={() => onChoose(kind)}><i>＋</i><b>{formTitles[kind]}</b><small>กรอกข้อมูลจริง</small></button>)}</div></div></div>; }
 type EntryField = {
     name: string;

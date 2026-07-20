@@ -68,7 +68,7 @@ function initializeOperationalWorkbook_() {
     CustomerCourses: ['course_id','customer_id','package_id','purchase_date','total_sessions','sessions_used','sessions_remaining','total_amount','paid_amount','balance_due','expiry_date','status','sales_staff_id','note','created_at'],
     CourseUsage: ['usage_id','course_id','customer_id','visit_id','usage_date','service_id','sessions_used','provider_id','note','created_at','created_by'],
     Expenses: ['expense_id','expense_date','category','vendor','description','amount','payment_method','receipt_url','status','staff_id','approved_by','note','created_at','updated_at'],
-    Inventory: ['item_id','item_name','category','unit','on_hand','reorder_level','cost_per_unit','lot_no','expiry_date','active','note','updated_at'],
+    Inventory: ['item_id','item_name','category','unit','on_hand','reorder_level','cost_per_unit','selling_price','lot_no','expiry_date','active','note','updated_at'],
     StockMovements: ['movement_id','movement_date','item_id','movement_type','quantity','unit_cost','reference_type','reference_id','staff_id','note','created_at']
     ,Settings: ['setting_id','setting_value','updated_at','updated_by']
   };

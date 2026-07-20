@@ -8,7 +8,7 @@ const read = path => readFile(new URL(path, root), "utf8");
 test("operational UI contains no seeded mock records or fallback arrays", async () => {
   const page = await read("app/page.tsx");
   assert.doesNotMatch(page, /mockCustomers|mockEmployees|mockTransactions|mockStock|TX001|ST001|C001|E001/);
-  assert.match(page, /APP_VERSION = "1\.2\.1"/);
+  assert.match(page, /APP_VERSION = "1\.3\.0"/);
   assert.match(page, /ยังไม่มีข้อมูล/);
   assert.match(page, /bangkokDay/);
   assert.match(page, /ผลการติดต่อ/);
@@ -21,6 +21,9 @@ test("operational UI contains no seeded mock records or fallback arrays", async 
   assert.match(page, /active === .*&& role === "owner" \? <SettingsPage/);
   assert.match(page, /setSystemData\(current => \(\{ \.\.\.current, settings:/);
   assert.match(page, /await onToggle\(name, value\)/);
+  assert.match(page, /InventoryItemAction/);
+  assert.match(page, /selling_price/);
+  assert.match(page, /setEntityActive/);
 });
 
 test("server protects data and separates owner from staff actions", async () => {
@@ -43,6 +46,7 @@ test("Apps Script source covers every operational module", async () => {
   assert.match(source, /setNumberFormat\('@'\)/);
   assert.match(source, /applyStockMovement_/);
   assert.match(source, /Settings/);
+  assert.match(source, /selling_price/);
   assert.match(source, /replaceCatalog/);
   assert.match(source, /cleanupLegacyMockData/);
 });
