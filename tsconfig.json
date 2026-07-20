@@ -22,13 +22,6 @@
       "@/*": ["./*"]
     }
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
-  ],
-  "exclude": ["node_modules"]
+  "include": ["next-env.d.ts", "app/**/*.ts", "app/**/*.tsx", "netlify/**/*.ts", "vite.config.ts", "netlify.vite.config.ts"],
+  "exclude": ["node_modules", "dist", "netlify-dist", "worker", "db", "examples", "build"]
 }
