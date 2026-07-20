@@ -99,11 +99,20 @@ export default function Home() {
     } }
     async function updateCustomerStatus(customerId: string, status: string, detail: RawRecord = {}) { await callRaweeApi("recordCustomerActivity", { customer_id: customerId, status, ...detail }); await loadSheetData(); }
     async function saveOperationalRecord(action: string, data: RawRecord) { await callRaweeApi(action, data); await loadSheetData(); }
-    async function logout() { await fetch("/api/rawee-auth", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "logout" }) }); setRole(null); }
+    async function logout() { try {
+        await fetch("/api/rawee-auth", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "logout" }) });
+    }
+    finally {
+        setActive(navItems[0][0]);
+        setShowAdd(false);
+        setShowActions(false);
+        setShowForm(null);
+        setRole(null);
+    } }
     if (role === undefined)
         return <div className="login-loading">กำลังเปิดระบบ...</div>;
     if (role === null)
-        return <LoginPage onLogin={nextRole => { setRole(nextRole); void loadSheetData(); }}/>;
+        return <LoginPage onLogin={nextRole => { setActive(navItems[0][0]); setRole(nextRole); void loadSheetData(); }}/>;
     const disabledModules = new Set(systemData.settings.filter(row => String(row.setting_value).toUpperCase() === "FALSE").map(row => String(row.setting_id).replace(/^module:/, "")));
     const visibleNav = navItems.filter(([label]) => (role === "owner" || label !== "ตั้งค่า") && (label === "ภาพรวม" || label === "ตั้งค่า" || !disabledModules.has(label)));
     const openCount = customers.filter(item => ["ด่วน", "เกินกำหนด", "รอติดตาม"].includes(item.status)).length;

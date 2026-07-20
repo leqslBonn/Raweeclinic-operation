@@ -17,6 +17,8 @@ test("operational UI contains no seeded mock records or fallback arrays", async 
   assert.match(page, /CustomerEditAction/);
   assert.match(page, /ตัดจาก Stock/);
   assert.match(page, /setModuleEnabled/);
+  assert.match(page, /setActive\(navItems\[0\]\[0\]\);\s*setRole\(nextRole\)/);
+  assert.match(page, /active === .*&& role === "owner" \? <SettingsPage/);
 });
 
 test("server protects data and separates owner from staff actions", async () => {
