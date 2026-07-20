@@ -2,11 +2,13 @@ const OWNER_ACTIONS = new Set([
   "getSystemData", "addCustomer", "updateCustomer", "recordCustomerActivity",
   "addAppointment", "addFollowUp", "addEmployee", "addTransaction", "addVisit",
   "addExpense", "addService", "addPackage", "sellCourse", "useCourse",
-  "addInventoryItem", "addStockMovement", "addSOP", "clockIn"
+  "addInventoryItem", "addStockMovement", "addSOP", "clockIn",
+  "approveExpense", "setAppointmentStatus", "voidTransaction", "setEntityActive",
+  "repairPhoneFormatting", "setModuleEnabled"
 ]);
 
 const STAFF_ACTIONS = new Set([
-  "getSystemData", "addCustomer", "updateCustomer", "recordCustomerActivity",
+  "getSystemData", "addCustomer", "recordCustomerActivity",
   "addAppointment", "addFollowUp", "addTransaction", "addVisit", "addExpense",
   "sellCourse", "useCourse", "addStockMovement", "clockIn"
 ]);
@@ -39,12 +41,14 @@ async function readSession(request, secret) {
   } catch { return null; }
 }
 
-export default async (request) => {
+const handler = async (request) => {
   if (request.method !== "POST") return Response.json({ ok: false, error: "Method not allowed" }, { status: 405 });
   const appsScriptUrl = Netlify.env.get("RAWEE_APPS_SCRIPT_URL");
   const apiKey = Netlify.env.get("RAWEE_APPS_SCRIPT_API_KEY");
   if (!appsScriptUrl || !apiKey) return Response.json({ ok: false, error: "Server connection is not configured" }, { status: 503 });
-  const session = await readSession(request, apiKey);
+  const sessionSecret = Netlify.env.get("RAWEE_SESSION_SECRET");
+  if (!sessionSecret) return Response.json({ ok: false, error: "Server authentication is not configured" }, { status: 503 });
+  const session = await readSession(request, sessionSecret);
   if (!session) return Response.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 });
 
   try {
@@ -52,7 +56,8 @@ export default async (request) => {
     const action = String(body.action || "");
     const allowed = session.role === "owner" ? OWNER_ACTIONS : STAFF_ACTIONS;
     if (!allowed.has(action)) return Response.json({ ok: false, error: "FORBIDDEN" }, { status: 403 });
-    const data = { ...(body.data || {}), performed_by: session.role };
+    const submitted = body.data || {};
+    const data = { ...submitted, performed_by: session.role, actor_id: session.role === "owner" ? "owner" : String(submitted.staff_id || "staff") };
     if (session.role === "staff" && action === "addExpense") data.status = "Pending";
     const upstream = await fetch(appsScriptUrl, {
       method: "POST",
@@ -69,4 +74,5 @@ export default async (request) => {
   }
 };
 
+export default handler;
 export const config = { path: "/api/rawee" };
