@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 "use client";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.2.1";
 const RAW_DATA_SHEET_URL = "https://docs.google.com/spreadsheets/d/1wA-u9CkCVDQ88LIl1P9cNMFaNBF6c6A2DuQsYV9adR8/edit";
 const LOCAL_PREVIEW = import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "owner";
 type UserRole = "owner" | "staff";
@@ -99,6 +99,18 @@ export default function Home() {
     } }
     async function updateCustomerStatus(customerId: string, status: string, detail: RawRecord = {}) { await callRaweeApi("recordCustomerActivity", { customer_id: customerId, status, ...detail }); await loadSheetData(); }
     async function saveOperationalRecord(action: string, data: RawRecord) { await callRaweeApi(action, data); await loadSheetData(); }
+    async function updateModuleEnabled(name: string, enabled: boolean) {
+        const settingId = `module:${name}`;
+        const previousSettings = systemData.settings;
+        setSystemData(current => ({ ...current, settings: [...current.settings.filter(row => String(row.setting_id) !== settingId), { setting_id: settingId, setting_value: enabled ? "TRUE" : "FALSE" }] }));
+        try {
+            await callRaweeApi("setModuleEnabled", { module: name, enabled });
+        }
+        catch (error) {
+            setSystemData(current => ({ ...current, settings: previousSettings }));
+            throw error;
+        }
+    }
     async function logout() { try {
         await fetch("/api/rawee-auth", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "logout" }) });
     }
@@ -117,7 +129,7 @@ export default function Home() {
     const visibleNav = navItems.filter(([label]) => (role === "owner" || label !== "ตั้งค่า") && (label === "ภาพรวม" || label === "ตั้งค่า" || !disabledModules.has(label)));
     const openCount = customers.filter(item => ["ด่วน", "เกินกำหนด", "รอติดตาม"].includes(item.status)).length;
     return <main className="app-shell"><aside className="sidebar"><div className="brand"><div className="brand-mark">R<span>✦</span></div><div><strong>RAWEE</strong><small>AESTHETIC CLINIC</small></div></div><nav><p className="nav-label">เมนูหลัก</p>{visibleNav.map(([label, icon]) => <button key={label} className={active === label ? "active" : ""} onClick={() => setActive(label)}><span className="nav-icon">{icon}</span>{label}{label === "ติดตามลูกค้า" && openCount > 0 && <b className="badge">{openCount}</b>}</button>)}</nav><div className="clinic-card"><span className="pulse"/><div><b>Rawee Clinic</b><small>{dataStatus === "sheet" ? `เชื่อม Google Sheet · v${APP_VERSION}` : `ตรวจการเชื่อมต่อ · v${APP_VERSION}`}</small></div></div><div className="user"><div className="avatar">{role === "owner" ? "ร" : "S"}</div><div><b>{role === "owner" ? "คุณรวี" : "Staff"}</b><small>{role === "owner" ? "เจ้าของคลินิก" : "พนักงาน"}</small></div><button className="logout-btn" onClick={() => void logout()}>ออก</button></div></aside>
-  <section className="workspace"><header><div><h1>{active}</h1><p>{today} · สาขาคลองสาม</p></div><div className="header-actions"><span className={`data-source ${dataStatus}`}>{dataStatus === "sheet" ? "● Google Sheet" : dataStatus === "loading" ? "กำลังโหลด..." : "○ เชื่อมต่อไม่สำเร็จ"}</span><button className="icon-btn" aria-label="โหลดข้อมูลใหม่" onClick={() => void loadSheetData()}>↻</button><button className="primary" onClick={() => setShowActions(true)}>＋ บันทึกข้อมูล</button></div></header>{dataStatus === "error" && <div className="system-alert">โหลดข้อมูลไม่สำเร็จ: {loadError} <button onClick={() => void loadSheetData()}>ลองอีกครั้ง</button></div>}{active === "ภาพรวม" ? <Dashboard onOpenModule={setActive} customers={customers} employees={employees} systemData={systemData}/> : active === "ตั้งค่า" && role === "owner" ? <SettingsPage /> : <ModuleContent active={active} role={role} onAdd={() => setShowAdd(true)} customers={customers} employees={employees} systemData={systemData} onOpenForm={setShowForm} onUpdateStatus={updateCustomerStatus}/>}</section>
+  <section className="workspace"><header><div><h1>{active}</h1><p>{today} · สาขาคลองสาม</p></div><div className="header-actions"><span className={`data-source ${dataStatus}`}>{dataStatus === "sheet" ? "● Google Sheet" : dataStatus === "loading" ? "กำลังโหลด..." : "○ เชื่อมต่อไม่สำเร็จ"}</span><button className="icon-btn" aria-label="โหลดข้อมูลใหม่" onClick={() => void loadSheetData()}>↻</button><button className="primary" onClick={() => setShowActions(true)}>＋ บันทึกข้อมูล</button></div></header>{dataStatus === "error" && <div className="system-alert">โหลดข้อมูลไม่สำเร็จ: {loadError} <button onClick={() => void loadSheetData()}>ลองอีกครั้ง</button></div>}{active === "ภาพรวม" ? <Dashboard onOpenModule={setActive} customers={customers} employees={employees} systemData={systemData}/> : active === "ตั้งค่า" && role === "owner" ? <SettingsPage settings={systemData.settings} onToggle={updateModuleEnabled}/> : <ModuleContent active={active} role={role} onAdd={() => setShowAdd(true)} customers={customers} employees={employees} systemData={systemData} onOpenForm={setShowForm} onUpdateStatus={updateCustomerStatus}/>}</section>
   {showAdd && <AddCustomer services={systemData.services} onClose={() => setShowAdd(false)} onSaved={loadSheetData}/>} {showActions && <ActionCenter role={role} onClose={() => setShowActions(false)} onChoose={kind => { setShowActions(false); if (kind === "customer") setShowAdd(true); else setShowForm(kind); }}/>}{showForm && <OperationalForm kind={showForm} role={role} customers={customers} employees={employees} systemData={systemData} onClose={() => setShowForm(null)} onSave={saveOperationalRecord}/>}</main>;
 }
 function LoginPage({ onLogin }: {
@@ -340,17 +352,19 @@ finally {
     onClose(); }}><div className="modal operational-modal"><button className="modal-close" onClick={onClose}>×</button><span className="eyebrow">GOOGLE SHEET ENTRY</span><h2>{formTitles[kind]}</h2><p>กรอกข้อมูลจริง ระบบจะบันทึกลงแท็บที่เกี่ยวข้อง</p><form onSubmit={submit} onChange={change}>{role === "staff" && <label className="operator-field">พนักงานผู้ทำรายการ<select name="staff_id" required defaultValue=""><option value="" disabled>เลือกชื่อพนักงาน...</option>{employeeOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}<div className="entry-grid">{fields[kind as Exclude<FormKind, "customer">].map(field => <label key={field.name} className={field.type === "textarea" ? "wide-field" : ""}>{field.label}{field.type === "textarea" ? <textarea name={field.name} required={field.required}/> : field.options ? <select name={field.name} required={field.required} defaultValue=""><option value="" disabled>เลือก...</option>{field.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input name={field.name} type={field.type || "text"} required={field.required} defaultValue={field.defaultValue} min={field.type === "number" ? "0" : undefined} step={field.type === "number" ? "any" : undefined}/>}</label>)}</div>{error && <p className="form-error">{error}</p>}<button className="primary form-submit" disabled={saving}>{saving ? "กำลังบันทึก..." : "บันทึกลง Google Sheet"}</button></form></div></div>; }
 async function callRaweeApi(action: string, data: RawRecord = {}) { const response = await fetch("/api/rawee", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, data }) }); const result = await response.json().catch(() => ({ ok: false, error: "ระบบตอบกลับไม่ถูกต้อง" })); if (!response.ok || !result.ok)
     throw new Error(result.error === "FORBIDDEN" ? "บัญชีนี้ไม่มีสิทธิ์ทำรายการนี้" : result.error === "AUTH_REQUIRED" ? "กรุณาเข้าสู่ระบบใหม่" : result.error || "เชื่อม Google Sheet ไม่สำเร็จ"); return result; }
-function SettingsPage() {
-    const [enabled, setEnabled] = useState<Record<string, boolean>>(Object.fromEntries(systemModules.map(name => [name, true])));
-    const [saving, setSaving] = useState("");
-    useEffect(() => { if (LOCAL_PREVIEW) return; void callRaweeApi("getSystemData").then(result => { const next = Object.fromEntries(systemModules.map(name => [name, true])); for (const row of result.settings || []) {
+function SettingsPage({ settings, onToggle }: {
+    settings: RawRecord[];
+    onToggle: (name: string, enabled: boolean) => Promise<void>;
+}) {
+    const enabled = Object.fromEntries(systemModules.map(name => [name, true])) as Record<string, boolean>;
+    for (const row of settings) {
         const name = String(row.setting_id || "").replace(/^module:/, "");
-        if (name in next)
-            next[name] = String(row.setting_value).toUpperCase() !== "FALSE";
-    } setEnabled(next); }); }, []);
+        if (name in enabled)
+            enabled[name] = String(row.setting_value).toUpperCase() !== "FALSE";
+    }
+    const [saving, setSaving] = useState("");
     async function toggle(name: string) { setSaving(name); const value = !enabled[name]; try {
-        await callRaweeApi("setModuleEnabled", { module: name, enabled: value });
-        setEnabled(current => ({ ...current, [name]: value }));
+        await onToggle(name, value);
     }
     catch (error) {
         window.alert(error instanceof Error ? error.message : "บันทึกไม่สำเร็จ");
@@ -360,7 +374,7 @@ function SettingsPage() {
     } }
     async function repairPhones() { if (!window.confirm("ซ่อมรูปแบบเบอร์โทรใน Google Sheet และเติมเลข 0 ให้ข้อมูล 9 หลัก?"))
         return; const result = await callRaweeApi("repairPhoneFormatting"); window.alert(`ซ่อมเบอร์โทรแล้ว ${result.repaired || 0} รายการ`); window.location.reload(); }
-    return <div className="settings-page"><div className="settings-title"><div className="module-icon">⚙</div><div><span className="eyebrow">SYSTEM SETTINGS</span><h2>ตั้งค่าระบบ</h2><p>การเชื่อมต่อและโมดูลที่พร้อมใช้งาน</p></div></div><div className="connection-card"><div className="connection-head"><div><h3>Google Sheet Connection</h3><p>ฐานข้อมูล Rawee data · เชื่อมผ่านระบบหลังบ้าน</p></div><span className="status-connected">● พร้อมใช้งาน</span></div><div className="secure-connection"><b>✓ ข้อมูลลับเก็บไว้ใน Netlify Environment</b><span>Staff มองไม่เห็นหน้าเชื่อมต่อและไม่มีสิทธิ์แก้การตั้งค่า</span></div><div className="settings-actions"><a className="sheet-link" href={RAW_DATA_SHEET_URL} target="_blank" rel="noreferrer">▦ เปิด Google Sheet (Raw Data)</a><button className="sheet-link" onClick={() => void repairPhones()}>ซ่อมรูปแบบเบอร์โทร</button></div></div><div className="module-toggles"><h3>เปิด–ปิดโมดูลระบบ</h3>{systemModules.map(name => <div key={name}><span>{name}</span><button className={`toggle ${enabled[name] ? "on" : ""}`} disabled={saving === name} onClick={() => void toggle(name)} aria-label={`${enabled[name] ? "ปิด" : "เปิด"} ${name}`}><i /></button></div>)}</div></div>;
+    return <div className="settings-page"><div className="settings-title"><div className="module-icon">⚙</div><div><span className="eyebrow">SYSTEM SETTINGS</span><h2>ตั้งค่าระบบ</h2><p>การเชื่อมต่อและโมดูลที่พร้อมใช้งาน</p></div></div><div className="connection-card"><div className="connection-head"><div><h3>Google Sheet Connection</h3><p>ฐานข้อมูล Rawee data · เชื่อมผ่านระบบหลังบ้าน</p></div><span className="status-connected">● พร้อมใช้งาน</span></div><div className="secure-connection"><b>✓ ข้อมูลลับเก็บไว้ใน Netlify Environment</b><span>Staff มองไม่เห็นหน้าเชื่อมต่อและไม่มีสิทธิ์แก้การตั้งค่า</span></div><div className="settings-actions"><a className="sheet-link" href={RAW_DATA_SHEET_URL} target="_blank" rel="noreferrer">▦ เปิด Google Sheet (Raw Data)</a><button className="sheet-link" onClick={() => void repairPhones()}>ซ่อมรูปแบบเบอร์โทร</button></div></div><div className="module-toggles"><h3>เปิด–ปิดโมดูลระบบ</h3>{systemModules.map(name => <div key={name}><span>{name}</span><button className={`toggle ${enabled[name] ? "on" : ""}`} disabled={Boolean(saving)} onClick={() => void toggle(name)} aria-label={`${enabled[name] ? "ปิด" : "เปิด"} ${name}`}><i /></button></div>)}</div></div>;
 }
 function AddCustomer({ services, onClose, onSaved }: {
     services: RawRecord[];

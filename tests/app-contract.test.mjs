@@ -8,7 +8,7 @@ const read = path => readFile(new URL(path, root), "utf8");
 test("operational UI contains no seeded mock records or fallback arrays", async () => {
   const page = await read("app/page.tsx");
   assert.doesNotMatch(page, /mockCustomers|mockEmployees|mockTransactions|mockStock|TX001|ST001|C001|E001/);
-  assert.match(page, /APP_VERSION = "1\.2\.0"/);
+  assert.match(page, /APP_VERSION = "1\.2\.1"/);
   assert.match(page, /ยังไม่มีข้อมูล/);
   assert.match(page, /bangkokDay/);
   assert.match(page, /ผลการติดต่อ/);
@@ -19,6 +19,8 @@ test("operational UI contains no seeded mock records or fallback arrays", async 
   assert.match(page, /setModuleEnabled/);
   assert.match(page, /setActive\(navItems\[0\]\[0\]\);\s*setRole\(nextRole\)/);
   assert.match(page, /active === .*&& role === "owner" \? <SettingsPage/);
+  assert.match(page, /setSystemData\(current => \(\{ \.\.\.current, settings:/);
+  assert.match(page, /await onToggle\(name, value\)/);
 });
 
 test("server protects data and separates owner from staff actions", async () => {
